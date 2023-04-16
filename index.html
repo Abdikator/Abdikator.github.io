@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 
+
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -79,7 +81,7 @@
 <body>
   <h1>القرآن الكريم<br>The Honorable Quran</h1>
   <br>
-  <input type="text" id="topic" placeholder="Enter a topic">
+  <textarea id="topic" placeholder="Enter a topic" oninput="autoResize(this)"></textarea>
   <br>
   <button onclick="fetchVerseByTopic()">Search Topic</button>
   <br>
@@ -179,6 +181,11 @@
       const scrollTopValue = Math.min(elementOffsetTop - (containerHeight - elementHeight) / 2, contentHeight - containerHeight);
       surahContainer.scrollTop = scrollTopValue;
     }
+    function autoResize(element) {
+      element.style.height = 'auto'; // Reset the height to auto
+      element.style.height = element.scrollHeight + 'px'; // Set the new height based on the scroll height
+    }
+
 
 
   </script>
