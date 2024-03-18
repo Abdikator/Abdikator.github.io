@@ -24,7 +24,7 @@ async function fetchVerseByTopic() {
 
     const checkedIndices = new Set();
 
-    while (selectedResults.length < 10 && attempts < results.length) {
+    while (selectedResults.length < 20 && attempts < results.length) {
         const randomIndex = Math.floor(Math.random() * results.length);
         const result = results[randomIndex];
 
