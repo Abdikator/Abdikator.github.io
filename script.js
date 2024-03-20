@@ -1,8 +1,36 @@
 let currentSurah = null;
 let currentAyah = null;
 
+// Sørensen-Dice coefficient for string similarity
+function diceCoefficient(string1, string2) {
+    if (string1 === string2) return 1;
+    if (string1.length < 2 || string2.length < 2) return 0;
+
+    let matches = 0;
+    const bigrams1 = new Map();
+
+    for (let i = 0; i < string1.length - 1; i++) {
+        const bigram = string1.substr(i, 2);
+        const count = bigrams1.has(bigram) ? bigrams1.get(bigram) + 1 : 1;
+
+        bigrams1.set(bigram, count);
+    }
+
+    for (let i = 0; i < string2.length - 1; i++) {
+        const bigram = string2.substr(i, 2);
+        const count = bigrams1.has(bigram) ? bigrams1.get(bigram) : 0;
+
+        if (count > 0) {
+            bigrams1.set(bigram, count - 1);
+            matches++;
+        }
+    }
+
+    return (2.0 * matches) / (string1.length + string2.length - 2);
+}
+
 async function fetchVerseByTopic() {
-    const topic = document.getElementById("topic").value.trim();
+    const topic = document.getElementById("topic").value.trim().toLowerCase();
 
     if (topic === "") {
         alert("Please enter a topic.");
@@ -19,71 +47,30 @@ async function fetchVerseByTopic() {
 
     const results = searchData.search.results;
     const selectedResults = [];
+    const similarityThreshold = 0.3; // Adjust based on desired leniency
 
-    let attempts = 0;
-
-    const checkedIndices = new Set();
-
-    while (selectedResults.length < 20 && attempts < results.length) {
-        const randomIndex = Math.floor(Math.random() * results.length);
-        const result = results[randomIndex];
-
-        if (!checkedIndices.has(randomIndex)) {
-            let valid = true;
-
-            for (const selectedResult of selectedResults) {
-                if (
-                    selectedResult.surah_id === result.surah_id &&
-                    Math.abs(selectedResult.verse_number - result.verse_number) <= 20
-                ) {
-                    valid = false;
-                    break;
-                }
-            }
-
-            if (valid) {
-                selectedResults.push(result);
-            }
-
-            checkedIndices.add(randomIndex); // Add the index to the checkedIndices set
-            attempts++;
-        }
-
-        // Break the loop if all verses have been checked
-        if (checkedIndices.size === results.length) {
-            break;
+    for (const result of results) {
+        const verseText = result.text || ""; // Assuming 'text' contains the verse text
+        if (diceCoefficient(topic, verseText.toLowerCase()) >= similarityThreshold) {
+            selectedResults.push(result);
+            if (selectedResults.length >= 20) break;
         }
     }
 
+    if (selectedResults.length === 0) {
+        alert("No verses closely matched the topic.");
+        return;
+    }
 
-
+    // Continue with displaying the results as per your existing code...
     const fetchedVersesContainer = document.getElementById('fetched-verses');
     fetchedVersesContainer.innerHTML = '';
 
     for (const result of selectedResults) {
-        const verseId = result.verse_id;
-
-        const responseVerse = await fetch(`https://api.alquran.cloud/v1/ayah/${verseId}/editions/quran-simple,en.sahih`);
-        const verseData = await responseVerse.json();
-
-        let arabicText = verseData.data[0].text;
-        const englishText = verseData.data[1].text;
-        const surahNumber = verseData.data[1].surah.number;
-        const ayahNumber = verseData.data[1].numberInSurah;
-        const surahName = verseData.data[1].surah.englishName;
-
-        // Remove Bismillah if it's the first verse of a Surah (except Surah Al-Fatiha and Surah At-Tawbah)
-        if (ayahNumber === 1 && surahNumber !== 1 && surahNumber !== 9) {
-            const bismillahRegex = /^بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ\s*/;
-            arabicText = arabicText.replace(bismillahRegex, '');
-        }
-
-        fetchedVersesContainer.innerHTML += `<div><p>${arabicText}<br>${englishText}<br><em>(${surahName}, ${ayahNumber})</em></p><button onclick="revealSurahByIndex(${surahNumber}, ${ayahNumber})">Reveal</button></div><br>`;
+        // Your existing code for fetching and displaying verses goes here...
     }
 
-
     document.body.classList.add('content-moved-up');
-
 }
 
 
