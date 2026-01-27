@@ -79,6 +79,8 @@ let activeEditionKey = "";
 let surahMeta = new Map();
 let navDragStartY = null;
 let navDragDelta = 0;
+let pageSwipeStartX = null;
+let pageSwipeStartY = null;
 
 function normalizeArabic(text) {
   return String(text || "")
@@ -256,6 +258,43 @@ function handleNavPointerUp() {
   }
   navDragStartY = null;
   navDragDelta = 0;
+}
+
+function handlePageSwipeStart(event) {
+  if (!isPageViewActive()) return;
+  const touch = event.touches ? event.touches[0] : event;
+  pageSwipeStartX = touch.clientX;
+  pageSwipeStartY = touch.clientY;
+}
+
+function handlePageSwipeMove(event) {
+  if (pageSwipeStartX === null || pageSwipeStartY === null) return;
+  const touch = event.touches ? event.touches[0] : event;
+  const dx = touch.clientX - pageSwipeStartX;
+  const dy = touch.clientY - pageSwipeStartY;
+
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
+    event.preventDefault();
+  }
+}
+
+function handlePageSwipeEnd(event) {
+  if (pageSwipeStartX === null || pageSwipeStartY === null) return;
+  const touch = event.changedTouches ? event.changedTouches[0] : event;
+  const dx = touch.clientX - pageSwipeStartX;
+  const dy = touch.clientY - pageSwipeStartY;
+  const threshold = 55;
+
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
+    if (dx < 0) {
+      changeMushafPage(1);
+    } else {
+      changeMushafPage(-1);
+    }
+  }
+
+  pageSwipeStartX = null;
+  pageSwipeStartY = null;
 }
 
 function setPageControlsEnabled(enabled) {
@@ -1407,6 +1446,9 @@ elements.navHandle.addEventListener("click", toggleNavCollapsed);
 elements.navHandle.addEventListener("touchstart", handleNavPointerDown, { passive: true });
 elements.navHandle.addEventListener("touchmove", handleNavPointerMove, { passive: true });
 elements.navHandle.addEventListener("touchend", handleNavPointerUp, { passive: true });
+elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: true });
+elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { passive: false });
+elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: true });
 window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
   if (isMobileViewport()) {

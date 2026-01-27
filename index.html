@@ -511,6 +511,10 @@
       gap: 16px;
     }
 
+    .modal-header .btn {
+      align-self: flex-start;
+    }
+
     .modal-title {
       font-family: "Fraunces", serif;
       font-size: 1.5rem;
@@ -930,8 +934,11 @@
       }
 
       .modal-card {
-        max-height: 92vh;
-        padding: 14px;
+        width: 100vw;
+        max-height: 100vh;
+        height: 100vh;
+        border-radius: 0;
+        padding: 12px;
       }
 
       .modal-header {
@@ -940,16 +947,41 @@
         gap: 8px;
       }
 
+      .modal-header .btn {
+        align-self: flex-start;
+      }
+
       .modal-controls {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        z-index: 4;
+        padding: 10px 12px;
+        background: rgba(8, 16, 14, 0.95);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(10px);
+        transition: transform 0.25s ease;
+      }
+
+      .modal-controls.is-collapsed {
+        transform: translateY(calc(100% - 52px));
       }
 
       .modal-control-body {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+
+      .modal-controls.is-collapsed .modal-control-body {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+      }
       }
 
       .control-group {
@@ -973,6 +1005,9 @@
 
       .surah-container {
         padding: 12px;
+        padding-bottom: 90px;
+        flex: 1;
+        min-height: 0;
       }
 
       .page-frame {
@@ -981,17 +1016,6 @@
     }
 
     @media (max-width: 520px) {
-      .modal-controls {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        padding: 8px 10px;
-        background: rgba(8, 16, 14, 0.92);
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(10px);
-      }
-
       .nav-handle {
         display: inline-flex;
       }
