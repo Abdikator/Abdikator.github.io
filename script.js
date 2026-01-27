@@ -23,11 +23,13 @@ const state = {
   isLoading: false,
   lastSearchId: 0,
   renderId: 0,
+  pendingPage: 0,
 };
 
 const elements = {
   topic: document.getElementById("topic"),
   searchBtn: document.getElementById("searchBtn"),
+  searchForm: document.getElementById("searchForm"),
   status: document.getElementById("status"),
   resultsCount: document.getElementById("resultsCount"),
   resultsList: document.getElementById("fetched-verses"),
@@ -107,6 +109,28 @@ function setLoading(isLoading) {
   state.isLoading = isLoading;
   elements.searchBtn.disabled = isLoading;
   elements.searchBtn.textContent = isLoading ? "Searching..." : "Search";
+}
+
+function updateUrlState() {
+  if (!window?.history?.replaceState) return;
+
+  const params = new URLSearchParams();
+  if (state.currentQuery) {
+    params.set("q", state.currentQuery);
+  }
+
+  const languageKeys = getSelectedLanguageKeys();
+  if (!(languageKeys.length === 1 && languageKeys[0] === "en")) {
+    params.set("lang", languageKeys.join(","));
+  }
+
+  if (state.currentPage > 0) {
+    params.set("page", String(state.currentPage + 1));
+  }
+
+  const queryString = params.toString();
+  const nextUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+  window.history.replaceState({}, "", nextUrl);
 }
 
 function updateResultsCount() {
@@ -201,7 +225,8 @@ async function renderResults() {
   );
 }
 
-async function fetchVerseByTopic() {
+async function fetchVerseByTopic(options = {}) {
+  const { pageIndex = 0, updateUrl = true } = options;
   const topic = elements.topic.value.trim();
   if (!topic) {
     setStatus("Enter a topic to search.", "error");
@@ -213,6 +238,7 @@ async function fetchVerseByTopic() {
   setStatus("Searching for verses...", "info");
 
   const searchId = ++state.lastSearchId;
+  state.currentQuery = topic;
 
   try {
     const response = await fetch(
@@ -230,6 +256,7 @@ async function fetchVerseByTopic() {
     if (rawResults.length === 0) {
       state.results = [];
       state.currentPage = 0;
+      state.pendingPage = 0;
       verseCache.clear();
       renderEmptyState("No verses found for that topic.");
       setStatus("No verses found. Try a different topic.", "error");
@@ -248,17 +275,23 @@ async function fetchVerseByTopic() {
     }
 
     state.results = uniqueResults;
-    state.currentPage = 0;
+    const totalPages = Math.max(1, Math.ceil(uniqueResults.length / PAGE_SIZE));
+    state.currentPage = Math.min(Math.max(pageIndex, 0), totalPages - 1);
+    state.pendingPage = 0;
     verseCache.clear();
 
     await renderResults();
 
     const total = uniqueResults.length;
     setStatus(`Found ${total} verse${total === 1 ? "" : "s"}.`, "success");
+    if (updateUrl) {
+      updateUrlState();
+    }
   } catch (error) {
     if (searchId !== state.lastSearchId) return;
     state.results = [];
     state.currentPage = 0;
+    state.pendingPage = 0;
     renderEmptyState("Search failed. Please try again.");
     setStatus("Search failed. Please try again.", "error");
   } finally {
@@ -500,6 +533,7 @@ function changePage(delta) {
   if (nextPage === state.currentPage) return;
   state.currentPage = nextPage;
   renderResults();
+  updateUrlState();
 }
 
 function handleLanguageChange() {
@@ -507,6 +541,7 @@ function handleLanguageChange() {
   if (state.results.length) {
     renderResults();
   }
+  updateUrlState();
 }
 
 async function handleResultsClick(event) {
@@ -549,7 +584,10 @@ function handleModalClick(event) {
   }
 }
 
-elements.searchBtn.addEventListener("click", fetchVerseByTopic);
+elements.searchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  fetchVerseByTopic();
+});
 elements.topic.addEventListener("input", () => autoResize(elements.topic));
 elements.prevBtn.addEventListener("click", () => changePage(-1));
 elements.nextBtn.addEventListener("click", () => changePage(1));
@@ -566,3 +604,40 @@ document.addEventListener("keydown", (event) => {
 autoResize(elements.topic);
 updateEditionKey();
 renderEmptyState("Search for a topic to see results.");
+
+function applyLanguageFromParams(langParam) {
+  if (!langParam) return;
+  const keys = langParam
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => TRANSLATIONS[item]);
+
+  if (!keys.length) return;
+
+  const inputs = elements.languageOptions.querySelectorAll("input[name='translation']");
+  inputs.forEach((input) => {
+    input.checked = keys.includes(input.value);
+  });
+}
+
+function initFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const query = params.get("q");
+  const lang = params.get("lang");
+  const pageParam = Number.parseInt(params.get("page"), 10);
+
+  if (lang) {
+    applyLanguageFromParams(lang);
+  }
+
+  updateEditionKey();
+
+  if (query) {
+    elements.topic.value = query;
+    autoResize(elements.topic);
+    const pageIndex = Number.isFinite(pageParam) ? Math.max(pageParam - 1, 0) : 0;
+    fetchVerseByTopic({ pageIndex, updateUrl: false });
+  }
+}
+
+initFromUrl();

@@ -3,10 +3,49 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>Quran Topic Search</title>
+  <title>Quran Topic Search | SearchQuran.info</title>
+  <meta name="description" content="Search the Quran by topic and explore Arabic verses with translations in English, French, Spanish, Urdu, Farsi, and Turkish.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://searchquran.info/">
+  <meta property="og:title" content="Quran Topic Search">
+  <meta property="og:description" content="Search the Quran by topic and explore Arabic verses with translations in six languages.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://searchquran.info/">
+  <meta property="og:site_name" content="SearchQuran.info">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://api.quran.com" crossorigin>
+  <link rel="preconnect" href="https://api.alquran.cloud" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  </noscript>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "SearchQuran.info",
+      "url": "https://searchquran.info/",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://searchquran.info/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+  </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "Quran Topic Search",
+      "url": "https://searchquran.info/",
+      "inLanguage": "en",
+      "isPartOf": {
+        "@type": "WebSite",
+        "url": "https://searchquran.info/"
+      }
+    }
+  </script>
   <style>
     :root {
       --bg: #07120f;
@@ -123,6 +162,12 @@
       animation-delay: 0.2s;
     }
 
+    .section-title {
+      margin: 0 0 6px;
+      font-size: 1.2rem;
+      letter-spacing: 0.02em;
+    }
+
     @keyframes rise {
       from {
         opacity: 0;
@@ -135,6 +180,12 @@
     }
 
     .search-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .search-panel form {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -569,44 +620,47 @@
     </header>
 
     <section class="panel search-panel">
-      <label class="field-label" for="topic">Search by topic</label>
-      <textarea id="topic" placeholder="Try mercy, patience, gratitude..." aria-label="Search topic"></textarea>
+      <h2 class="section-title">Search by topic</h2>
+      <form id="searchForm" role="search">
+        <label class="field-label" for="topic">Topic</label>
+        <textarea id="topic" name="q" placeholder="Try mercy, patience, gratitude..." aria-label="Search topic"></textarea>
 
-      <div>
-        <div class="field-label">Translations</div>
-        <div class="language-grid" id="languageOptions">
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="en" checked>
-            <span>English</span>
-          </label>
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="fr">
-            <span>French</span>
-          </label>
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="es">
-            <span>Spanish</span>
-          </label>
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="ur">
-            <span>Urdu</span>
-          </label>
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="fa">
-            <span>Farsi</span>
-          </label>
-          <label class="lang-chip">
-            <input type="checkbox" name="translation" value="tr">
-            <span>Turkish</span>
-          </label>
+        <div>
+          <div class="field-label">Translations</div>
+          <div class="language-grid" id="languageOptions">
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="en" checked>
+              <span>English</span>
+            </label>
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="fr">
+              <span>French</span>
+            </label>
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="es">
+              <span>Spanish</span>
+            </label>
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="ur">
+              <span>Urdu</span>
+            </label>
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="fa">
+              <span>Farsi</span>
+            </label>
+            <label class="lang-chip">
+              <input type="checkbox" name="translation" value="tr">
+              <span>Turkish</span>
+            </label>
+          </div>
         </div>
-      </div>
 
-      <div class="action-row">
-        <button class="btn btn-primary" id="searchBtn">Search</button>
-        <div class="hint">Up to 50 results. 10 per page.</div>
-      </div>
-      <div id="status" class="status" role="status" aria-live="polite"></div>
+        <div class="action-row">
+          <button class="btn btn-primary" id="searchBtn" type="submit">Search</button>
+          <div class="hint">Up to 50 results. 10 per page.</div>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </form>
     </section>
 
     <section class="panel results-panel">
@@ -619,8 +673,8 @@
       </div>
       <div id="fetched-verses" class="results-list"></div>
       <div class="pagination">
-        <button class="btn btn-ghost" id="prevBtn" disabled>Previous</button>
-        <button class="btn btn-ghost" id="nextBtn" disabled>Next</button>
+        <button class="btn btn-ghost" id="prevBtn" type="button" disabled>Previous</button>
+        <button class="btn btn-ghost" id="nextBtn" type="button" disabled>Next</button>
       </div>
     </section>
   </main>
@@ -639,6 +693,6 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <script src="script.js" defer></script>
 </body>
 </html>
