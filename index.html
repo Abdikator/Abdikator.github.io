@@ -16,9 +16,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://api.quran.com" crossorigin>
   <link rel="preconnect" href="https://api.alquran.cloud" crossorigin>
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
   <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   </noscript>
   <script type="application/ld+json">
     {
@@ -255,6 +255,13 @@
       align-items: center;
       gap: 12px;
       justify-content: space-between;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
     }
 
     .hint {
@@ -514,6 +521,56 @@
       font-size: 0.95rem;
     }
 
+    .modal-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 140px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    .control-input {
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--surface-strong);
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .control-input:focus {
+      outline: none;
+      border-color: rgba(39, 209, 162, 0.6);
+      box-shadow: 0 0 0 3px rgba(39, 209, 162, 0.2);
+    }
+
+
+    .control-row .control-input {
+      min-width: 78px;
+      width: 88px;
+      text-align: center;
+    }
+
     .surah-container {
       background: var(--surface-strong);
       border-radius: 16px;
@@ -522,6 +579,11 @@
       overflow-y: auto;
       display: grid;
       gap: 14px;
+    }
+
+    .surah-container.is-page {
+      display: block;
+      padding: 18px;
     }
 
     .verse-row {
@@ -539,6 +601,220 @@
       border-color: rgba(242, 178, 105, 0.6);
       box-shadow: 0 0 0 2px rgba(242, 178, 105, 0.2);
       background: linear-gradient(135deg, rgba(242, 178, 105, 0.12), rgba(39, 209, 162, 0.08));
+    }
+
+    .verse-row--arabic-only {
+      grid-template-columns: 1fr;
+    }
+
+    .surah-container.is-medina .verse-row--arabic-only {
+      background: rgba(7, 18, 15, 0.45);
+    }
+
+    .surah-container.is-medina .verse-label {
+      color: rgba(178, 200, 191, 0.7);
+      letter-spacing: 0.3em;
+    }
+
+    .surah-container.is-medina .verse-arabic {
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 1.7rem;
+      line-height: 2.7;
+    }
+
+    .page-frame {
+      border-radius: 18px;
+      padding: 22px 24px;
+      background: linear-gradient(180deg, rgba(255, 251, 244, 0.98), rgba(249, 243, 232, 0.98));
+      border: 1px solid rgba(86, 114, 82, 0.35);
+      box-shadow: inset 0 0 0 2px rgba(166, 196, 148, 0.25), 0 24px 50px rgba(0, 0, 0, 0.35);
+      min-height: 60vh;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page-frame::before {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(86, 114, 82, 0.35);
+      pointer-events: none;
+    }
+
+    .page-frame::after {
+      content: "";
+      position: absolute;
+      inset: 24px;
+      border-radius: 10px;
+      border: 1px dashed rgba(109, 163, 122, 0.35);
+      pointer-events: none;
+    }
+
+    .page-header,
+    .page-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: rgba(50, 70, 58, 0.8);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .page-text {
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 1.7rem;
+      line-height: 2.6;
+      direction: rtl;
+      text-align: justify;
+      text-justify: inter-word;
+      color: #1f2b22;
+      position: relative;
+    }
+
+    .page-ayah {
+      display: inline;
+    }
+
+    .page-ayah.is-highlighted .ayah-text {
+      background: rgba(242, 178, 105, 0.25);
+      border-radius: 10px;
+      padding: 0 6px;
+    }
+
+    .ayah-text {
+      display: inline;
+    }
+
+    .ayah-separator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.7em;
+      height: 1.7em;
+      margin: 0 6px;
+      border-radius: 50%;
+      border: none;
+      color: rgba(38, 64, 47, 0.85);
+      font-size: 0.68em;
+      position: relative;
+      background: transparent;
+      vertical-align: middle;
+      line-height: 1;
+    }
+
+    .ayah-separator::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><circle cx='32' cy='32' r='28' stroke='%235a8c61' stroke-width='1.4'/><circle cx='32' cy='32' r='22' stroke='%2381b08a' stroke-width='1' stroke-dasharray='1 3'/><path d='M32 3 L36 10 L32 16 L28 10 Z' fill='%23f6fbf7' stroke='%235a8c61' stroke-width='1'/><path d='M32 61 L36 54 L32 48 L28 54 Z' fill='%23f6fbf7' stroke='%235a8c61' stroke-width='1'/><path d='M3 32 L10 36 L16 32 L10 28 Z' fill='%23f6fbf7' stroke='%235a8c61' stroke-width='1'/><path d='M61 32 L54 36 L48 32 L54 28 Z' fill='%23f6fbf7' stroke='%235a8c61' stroke-width='1'/></svg>");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      opacity: 0.85;
+    }
+
+    .ayah-number {
+      position: relative;
+      z-index: 1;
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 0.78em;
+      color: rgba(38, 64, 47, 0.85);
+    }
+
+    .basmalah-line {
+      text-align: center;
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 1.6rem;
+      line-height: 2.2;
+      color: rgba(33, 49, 40, 0.9);
+      margin: 6px 0 10px;
+    }
+
+    .surah-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin: 10px 0 6px;
+      color: rgba(38, 64, 47, 0.9);
+    }
+
+    .surah-divider::before,
+    .surah-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(109, 163, 122, 0.7), transparent);
+    }
+
+    .surah-title {
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 1.3rem;
+      letter-spacing: 0.08em;
+      text-transform: none;
+      text-align: center;
+    }
+
+    .surah-title span {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(38, 64, 47, 0.6);
+      margin-top: 2px;
+    }
+
+    .page-translation-panel {
+      margin-top: 16px;
+      background: rgba(6, 18, 15, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .page-translation-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    .page-translation-line {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .page-translation-line.is-highlighted .page-translation-text {
+      background: rgba(242, 178, 105, 0.2);
+      border-radius: 10px;
+      padding: 2px 6px;
+    }
+
+    .page-translation-number {
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      padding: 4px 10px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .page-translation-text {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--text);
     }
 
     .verse-col {
@@ -656,7 +932,10 @@
         </div>
 
         <div class="action-row">
-          <button class="btn btn-primary" id="searchBtn" type="submit">Search</button>
+          <div class="action-buttons">
+            <button class="btn btn-primary" id="searchBtn" type="submit">Search</button>
+            <button class="btn btn-ghost" id="browseBtn" type="button">Browse Quran</button>
+          </div>
           <div class="hint">Up to 50 results. 10 per page.</div>
         </div>
         <div id="status" class="status" role="status" aria-live="polite"></div>
@@ -689,6 +968,37 @@
         </div>
         <button class="btn btn-ghost btn-icon" data-action="close">Close</button>
       </div>
+      <form id="modalNav" class="modal-controls">
+        <div class="control-group">
+          <label class="control-label" for="surahSelect">Surah</label>
+          <select id="surahSelect" class="control-input" aria-label="Select surah"></select>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="ayahInput">Ayah</label>
+          <input id="ayahInput" class="control-input" type="number" min="1" value="1" aria-label="Select ayah">
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="pageInput">Page</label>
+          <div class="control-row">
+            <button class="btn btn-ghost btn-small" id="pageNextBtn" type="button">Next</button>
+            <input id="pageInput" class="control-input" type="number" min="1" value="1" aria-label="Select page">
+            <button class="btn btn-ghost btn-small" id="pagePrevBtn" type="button">Prev</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="modalTranslation">Translation</label>
+          <select id="modalTranslation" class="control-input" aria-label="Select translation">
+            <option value="arabic">Arabic only (Mushaf)</option>
+            <option value="en">English</option>
+            <option value="fr">French</option>
+            <option value="es">Spanish</option>
+            <option value="ur">Urdu</option>
+            <option value="fa">Farsi</option>
+            <option value="tr">Turkish</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-small" id="goBtn" type="submit">Go</button>
+      </form>
       <div id="surahContainer" class="surah-container"></div>
     </div>
   </div>
