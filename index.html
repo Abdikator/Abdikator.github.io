@@ -1,126 +1,644 @@
 <!DOCTYPE html>
 <html lang="en">
-
-
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>Quran Verses</title>
+  <title>Quran Topic Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Noto+Naskh+Arabic:wght@400;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    .verse-container {
-      display: flex;
-      justify-content: space-between;
+    :root {
+      --bg: #07120f;
+      --bg-2: #0f241d;
+      --surface: rgba(15, 34, 28, 0.88);
+      --surface-strong: rgba(11, 28, 23, 0.95);
+      --text: #eef7f2;
+      --muted: #b2c8bf;
+      --accent: #27d1a2;
+      --accent-2: #f2b269;
+      --highlight: #fdf3c6;
+      --highlight-text: #1a1e1c;
+      --border: rgba(255, 255, 255, 0.08);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 18px;
     }
 
-    .arabic-text {
-      font-size: 1em;
-      line-height: 2.2em;
-      margin: 0;
-      padding: 0;
-      direction: rtl;
-      text-align: right;
-    }
-
-    .english-text {
-      font-size: 1em;
-      line-height: 2.2em;
-      margin: 0;
-      padding: 0;
+    * {
+      box-sizing: border-box;
     }
 
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
       margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: #093F2D;
-      color: white;
-      padding: 20px;
-      box-sizing: border-box;
-      overflow-y: auto;
-    }
-
-
-    h1 {
-      margin-bottom: 10px;
-      text-align: center;
-    }
-
-    #surahContainer {
-      height: 300px;
-      overflow-y: scroll;
-      border: 1px solid #ccc;
-      padding: 10px;
-      width: 90%;
-    }
-
-    .highlighted {
-      background-color: #92F4D3;
-      color: black;
-    }
-
-    .surahs {
-      display: none;
-      flex-direction: row;
+      min-height: 100vh;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      display: flex;
       justify-content: center;
-      /* Add this line */
+      padding: 32px 20px 60px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 15% 20%, rgba(39, 209, 162, 0.2), transparent 45%),
+        radial-gradient(circle at 85% 5%, rgba(242, 178, 105, 0.2), transparent 40%),
+        linear-gradient(160deg, var(--bg-2), var(--bg));
+      z-index: -2;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 140px 140px;
+      opacity: 0.35;
+      z-index: -1;
+    }
+
+    body.modal-open {
+      overflow: hidden;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .hero {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .hero-badge {
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      font-size: 0.7rem;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(7, 18, 15, 0.7);
+      color: var(--muted);
+    }
+
+    .hero h1 {
+      font-family: "Fraunces", serif;
+      font-size: clamp(2.3rem, 4vw, 3.4rem);
+      margin: 0;
+      letter-spacing: 0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .panel {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+      animation: rise 0.6s ease both;
+    }
+
+    .panel:nth-of-type(2) {
+      animation-delay: 0.1s;
+    }
+
+    .panel:nth-of-type(3) {
+      animation-delay: 0.2s;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .search-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .field-label {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    textarea {
       width: 100%;
-      /* Add this line */
+      min-height: 72px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: var(--surface-strong);
+      color: var(--text);
+      padding: 14px 16px;
+      font-size: 1rem;
+      line-height: 1.5;
+      resize: none;
     }
 
-    #fetched-verses {
+    textarea:focus {
+      outline: none;
+      border-color: rgba(39, 209, 162, 0.6);
+      box-shadow: 0 0 0 3px rgba(39, 209, 162, 0.2);
+    }
+
+    .language-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .lang-chip {
+      cursor: pointer;
+    }
+
+    .lang-chip input {
+      display: none;
+    }
+
+    .lang-chip span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(5, 16, 13, 0.6);
+      color: var(--muted);
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+
+    .lang-chip input:checked + span {
+      background: var(--accent);
+      color: #05231b;
+      border-color: var(--accent);
+      box-shadow: 0 8px 18px rgba(39, 209, 162, 0.3);
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 18px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #05231b;
+      box-shadow: 0 14px 28px rgba(39, 209, 162, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 34px rgba(39, 209, 162, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-ghost:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-ghost:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-small {
+      padding: 8px 14px;
+      font-size: 0.85rem;
+    }
+
+    .btn-icon {
+      padding: 8px 16px;
+    }
+
+    .status {
+      min-height: 20px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .status[data-tone="error"] {
+      color: #ffb4b4;
+    }
+
+    .status[data-tone="success"] {
+      color: #b8f6e3;
+    }
+
+    .results-panel {
       display: flex;
       flex-direction: column;
+      gap: 18px;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .results-header h2 {
+      margin: 0;
+      font-size: 1.3rem;
+    }
+
+    .muted {
+      color: var(--muted);
+      margin: 6px 0 0;
+    }
+
+    .page-indicator {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .results-list {
+      display: grid;
+      gap: 16px;
+    }
+
+    .result-card {
+      background: var(--surface-strong);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      transition: transform 0.2s ease, border 0.2s ease;
+    }
+
+    .result-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .result-title {
+      font-weight: 600;
+      font-size: 1.05rem;
+    }
+
+    .result-meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+
+    .arabic-text {
+      font-family: "Noto Naskh Arabic", serif;
+      font-size: 1.15rem;
+      line-height: 2.1;
+      direction: rtl;
+      text-align: right;
+      margin: 0;
+    }
+
+    .translation-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .translation-block {
+      background: rgba(6, 18, 15, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .translation-label {
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+
+    .translation-text {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      background: rgba(6, 18, 15, 0.4);
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
       align-items: center;
       justify-content: center;
-      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
     }
 
-    button.reveal-btn {
-      height: 30px;
-      padding: 0 10px;
-      font-size: 0.9em;
-      line-height: 1.2;
-      vertical-align: middle;
-      margin-top: 5px;
+    .modal.is-open {
+      opacity: 1;
+      pointer-events: auto;
     }
 
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 10, 9, 0.8);
+      backdrop-filter: blur(6px);
+    }
 
-    .search-container {
+    .modal-card {
+      position: relative;
+      width: min(1100px, 94vw);
+      max-height: 85vh;
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 18px;
       display: flex;
       flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+      animation: pop 0.25s ease;
+      z-index: 1;
+    }
+
+    @keyframes pop {
+      from {
+        transform: translateY(16px) scale(0.98);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
+      gap: 16px;
     }
 
-    body.content-moved-up {
-      justify-content: flex-start;
-      padding-top: 1%;
+    .modal-title {
+      font-family: "Fraunces", serif;
+      font-size: 1.5rem;
     }
 
-    body>* {
-      transition: all 0.1s ease;
+    .modal-subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .surah-container {
+      background: var(--surface-strong);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 16px;
+      overflow-y: auto;
+      display: grid;
+      gap: 14px;
+    }
+
+    .verse-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 16px;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(9, 23, 19, 0.6);
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .verse-row.is-highlighted {
+      border-color: rgba(242, 178, 105, 0.6);
+      box-shadow: 0 0 0 2px rgba(242, 178, 105, 0.2);
+      background: linear-gradient(135deg, rgba(242, 178, 105, 0.12), rgba(39, 209, 162, 0.08));
+    }
+
+    .verse-col {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .verse-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+    }
+
+    .verse-arabic {
+      font-family: "Noto Naskh Arabic", serif;
+      font-size: 1.3rem;
+      line-height: 2;
+      direction: rtl;
+      text-align: right;
+      margin: 0;
+    }
+
+    .loading-line {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+    }
+
+    .loading-line.short {
+      width: 60%;
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: 0% 0;
+      }
+      100% {
+        background-position: -200% 0;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .verse-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 24px 16px 48px;
+      }
+
+      .results-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .result-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .pagination {
+        justify-content: flex-start;
+      }
     }
   </style>
 </head>
-
 <body>
-  <h1>القرآن الكريم<br>The Honorable Quran</h1>
-  <div class="search-container">
-    <textarea id="topic" placeholder="Enter a topic" oninput="autoResize(this)"></textarea>
-    <br>
-    <button onclick="fetchVerseByTopic()">Search Topic</button>
-  </div>
-  <div id="fetched-verses"></div>
-  <div class="surahs">
-    <div id="surahContainer">
+  <main class="app">
+    <header class="hero">
+      <div class="hero-badge">Quran Topic Search</div>
+      <h1>القرآن الكريم</h1>
+      <p>The Honorable Quran topic explorer</p>
+    </header>
+
+    <section class="panel search-panel">
+      <label class="field-label" for="topic">Search by topic</label>
+      <textarea id="topic" placeholder="Try mercy, patience, gratitude..." aria-label="Search topic"></textarea>
+
+      <div>
+        <div class="field-label">Translations</div>
+        <div class="language-grid" id="languageOptions">
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="en" checked>
+            <span>English</span>
+          </label>
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="fr">
+            <span>French</span>
+          </label>
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="es">
+            <span>Spanish</span>
+          </label>
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="ur">
+            <span>Urdu</span>
+          </label>
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="fa">
+            <span>Farsi</span>
+          </label>
+          <label class="lang-chip">
+            <input type="checkbox" name="translation" value="tr">
+            <span>Turkish</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-primary" id="searchBtn">Search</button>
+        <div class="hint">Up to 50 results. 10 per page.</div>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel results-panel">
+      <div class="results-header">
+        <div>
+          <h2>Results</h2>
+          <p id="resultsCount" class="muted">No results yet.</p>
+        </div>
+        <div id="pageIndicator" class="page-indicator"></div>
+      </div>
+      <div id="fetched-verses" class="results-list"></div>
+      <div class="pagination">
+        <button class="btn btn-ghost" id="prevBtn" disabled>Previous</button>
+        <button class="btn btn-ghost" id="nextBtn" disabled>Next</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="surahModal" class="modal" aria-hidden="true">
+    <div class="modal-overlay" data-action="close"></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div>
+          <div id="modalTitle" class="modal-title">Surah</div>
+          <div id="modalSubtitle" class="modal-subtitle"></div>
+        </div>
+        <button class="btn btn-ghost btn-icon" data-action="close">Close</button>
+      </div>
+      <div id="surahContainer" class="surah-container"></div>
     </div>
   </div>
+
   <script src="script.js"></script>
 </body>
-
-
 </html>
