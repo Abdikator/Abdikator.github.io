@@ -523,9 +523,36 @@
 
     .modal-controls {
       display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .modal-control-body {
+      display: flex;
       flex-wrap: wrap;
       align-items: flex-end;
       gap: 12px;
+    }
+
+    .nav-handle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(6, 18, 15, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .nav-grab {
+      width: 28px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.35);
     }
 
     .control-group {
@@ -543,6 +570,19 @@
 
     .modal-controls .btn {
       white-space: nowrap;
+    }
+
+    .modal-controls.is-collapsed .modal-control-body {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      pointer-events: none;
+      transition: max-height 0.2s ease, opacity 0.2s ease;
+    }
+
+    .modal-controls .modal-control-body {
+      max-height: 500px;
+      transition: max-height 0.25s ease, opacity 0.25s ease;
     }
 
     .control-label {
@@ -906,6 +946,12 @@
         gap: 10px;
       }
 
+      .modal-control-body {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
       .control-group {
         min-width: 100%;
       }
@@ -944,6 +990,10 @@
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(10px);
+      }
+
+      .nav-handle {
+        display: inline-flex;
       }
 
       .modal-title {
@@ -1043,35 +1093,41 @@
         <button class="btn btn-ghost btn-icon" data-action="close">Close</button>
       </div>
       <form id="modalNav" class="modal-controls">
-        <div class="control-group">
-          <label class="control-label" for="surahSelect">Surah</label>
-          <select id="surahSelect" class="control-input" aria-label="Select surah"></select>
-        </div>
-        <div class="control-group">
-          <label class="control-label" for="ayahInput">Ayah</label>
-          <input id="ayahInput" class="control-input" type="number" min="1" value="1" aria-label="Select ayah">
-        </div>
-        <div class="control-group">
-          <label class="control-label" for="pageInput">Page</label>
-          <div class="control-row">
-            <button class="btn btn-ghost btn-small" id="pageNextBtn" type="button">Next</button>
-            <input id="pageInput" class="control-input" type="number" min="1" value="1" aria-label="Select page">
-            <button class="btn btn-ghost btn-small" id="pagePrevBtn" type="button">Prev</button>
+        <button class="nav-handle" id="navHandle" type="button" aria-expanded="true">
+          <span class="nav-grab"></span>
+          Navigation
+        </button>
+        <div class="modal-control-body">
+          <div class="control-group">
+            <label class="control-label" for="surahSelect">Surah</label>
+            <select id="surahSelect" class="control-input" aria-label="Select surah"></select>
           </div>
+          <div class="control-group">
+            <label class="control-label" for="ayahInput">Ayah</label>
+            <input id="ayahInput" class="control-input" type="number" min="1" value="1" aria-label="Select ayah">
+          </div>
+          <div class="control-group">
+            <label class="control-label" for="pageInput">Page</label>
+            <div class="control-row">
+              <button class="btn btn-ghost btn-small" id="pageNextBtn" type="button">Next</button>
+              <input id="pageInput" class="control-input" type="number" min="1" value="1" aria-label="Select page">
+              <button class="btn btn-ghost btn-small" id="pagePrevBtn" type="button">Prev</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="control-label" for="modalTranslation">Translation</label>
+            <select id="modalTranslation" class="control-input" aria-label="Select translation">
+              <option value="arabic">Arabic only (Mushaf)</option>
+              <option value="en">English</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+              <option value="ur">Urdu</option>
+              <option value="fa">Farsi</option>
+              <option value="tr">Turkish</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-small" id="goBtn" type="submit">Go</button>
         </div>
-        <div class="control-group">
-          <label class="control-label" for="modalTranslation">Translation</label>
-          <select id="modalTranslation" class="control-input" aria-label="Select translation">
-            <option value="arabic">Arabic only (Mushaf)</option>
-            <option value="en">English</option>
-            <option value="fr">French</option>
-            <option value="es">Spanish</option>
-            <option value="ur">Urdu</option>
-            <option value="fa">Farsi</option>
-            <option value="tr">Turkish</option>
-          </select>
-        </div>
-        <button class="btn btn-primary btn-small" id="goBtn" type="submit">Go</button>
       </form>
       <div id="surahContainer" class="surah-container"></div>
     </div>

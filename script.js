@@ -64,6 +64,7 @@ const elements = {
   modalTitle: document.getElementById("modalTitle"),
   modalSubtitle: document.getElementById("modalSubtitle"),
   modalNav: document.getElementById("modalNav"),
+  navHandle: document.getElementById("navHandle"),
   surahSelect: document.getElementById("surahSelect"),
   ayahInput: document.getElementById("ayahInput"),
   pageInput: document.getElementById("pageInput"),
@@ -76,6 +77,8 @@ const elements = {
 let verseCache = new Map();
 let activeEditionKey = "";
 let surahMeta = new Map();
+let navDragStartY = null;
+let navDragDelta = 0;
 
 function normalizeArabic(text) {
   return String(text || "")
@@ -216,6 +219,43 @@ function updateMedinaStyles() {
   elements.surahContainer.classList.toggle("is-medina", isMedina);
   elements.surahContainer.classList.toggle("is-page", isPage);
   setPageControlsEnabled(isPage);
+}
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 700px)").matches;
+}
+
+function setNavCollapsed(collapsed) {
+  if (!elements.modalNav || !elements.navHandle) return;
+  elements.modalNav.classList.toggle("is-collapsed", collapsed);
+  elements.navHandle.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function toggleNavCollapsed() {
+  if (!elements.modalNav) return;
+  setNavCollapsed(!elements.modalNav.classList.contains("is-collapsed"));
+}
+
+function handleNavPointerDown(event) {
+  navDragStartY = event.touches ? event.touches[0].clientY : event.clientY;
+  navDragDelta = 0;
+}
+
+function handleNavPointerMove(event) {
+  if (navDragStartY === null) return;
+  const currentY = event.touches ? event.touches[0].clientY : event.clientY;
+  navDragDelta = currentY - navDragStartY;
+}
+
+function handleNavPointerUp() {
+  if (navDragStartY === null) return;
+  if (navDragDelta > 30) {
+    setNavCollapsed(false);
+  } else if (navDragDelta < -30) {
+    setNavCollapsed(true);
+  }
+  navDragStartY = null;
+  navDragDelta = 0;
 }
 
 function setPageControlsEnabled(enabled) {
@@ -1173,6 +1213,11 @@ function openModal() {
   elements.modal.classList.add("is-open");
   elements.modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  if (isMobileViewport()) {
+    setNavCollapsed(true);
+  } else {
+    setNavCollapsed(false);
+  }
 }
 
 function closeModal() {
@@ -1358,6 +1403,18 @@ elements.pagePrevBtn.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtn.addEventListener("click", () => changeMushafPage(1));
 elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
+elements.navHandle.addEventListener("click", toggleNavCollapsed);
+elements.navHandle.addEventListener("touchstart", handleNavPointerDown, { passive: true });
+elements.navHandle.addEventListener("touchmove", handleNavPointerMove, { passive: true });
+elements.navHandle.addEventListener("touchend", handleNavPointerUp, { passive: true });
+window.addEventListener("resize", () => {
+  if (!elements.modal.classList.contains("is-open")) return;
+  if (isMobileViewport()) {
+    setNavCollapsed(true);
+  } else {
+    setNavCollapsed(false);
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && elements.modal.classList.contains("is-open")) {
