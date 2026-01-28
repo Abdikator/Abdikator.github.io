@@ -64,7 +64,8 @@ const elements = {
   modalTitle: document.getElementById("modalTitle"),
   modalSubtitle: document.getElementById("modalSubtitle"),
   modalNav: document.getElementById("modalNav"),
-  navHandle: document.getElementById("navHandle"),
+  navToggle: document.getElementById("navToggle"),
+  navOverlay: document.getElementById("navOverlay"),
   surahSelect: document.getElementById("surahSelect"),
   ayahInput: document.getElementById("ayahInput"),
   pageInput: document.getElementById("pageInput"),
@@ -77,8 +78,6 @@ const elements = {
 let verseCache = new Map();
 let activeEditionKey = "";
 let surahMeta = new Map();
-let navDragStartY = null;
-let navDragDelta = 0;
 let pageSwipeStartX = null;
 let pageSwipeStartY = null;
 
@@ -223,41 +222,23 @@ function updateMedinaStyles() {
   setPageControlsEnabled(isPage);
 }
 
-function isMobileViewport() {
-  return window.matchMedia("(max-width: 700px)").matches;
+function setNavOverlay(open) {
+  if (!elements.navOverlay || !elements.navToggle) return;
+  elements.navOverlay.classList.toggle("is-open", open);
+  elements.navOverlay.setAttribute("aria-hidden", String(!open));
+  elements.navToggle.setAttribute("aria-expanded", String(open));
+  elements.navToggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
 }
 
-function setNavCollapsed(collapsed) {
-  if (!elements.modalNav || !elements.navHandle) return;
-  elements.modalNav.classList.toggle("is-collapsed", collapsed);
-  elements.navHandle.setAttribute("aria-expanded", String(!collapsed));
+function toggleNavOverlay() {
+  if (!elements.navOverlay) return;
+  setNavOverlay(!elements.navOverlay.classList.contains("is-open"));
 }
 
-function toggleNavCollapsed() {
-  if (!elements.modalNav) return;
-  setNavCollapsed(!elements.modalNav.classList.contains("is-collapsed"));
-}
-
-function handleNavPointerDown(event) {
-  navDragStartY = event.touches ? event.touches[0].clientY : event.clientY;
-  navDragDelta = 0;
-}
-
-function handleNavPointerMove(event) {
-  if (navDragStartY === null) return;
-  const currentY = event.touches ? event.touches[0].clientY : event.clientY;
-  navDragDelta = currentY - navDragStartY;
-}
-
-function handleNavPointerUp() {
-  if (navDragStartY === null) return;
-  if (navDragDelta > 30) {
-    setNavCollapsed(false);
-  } else if (navDragDelta < -30) {
-    setNavCollapsed(true);
+function handleNavOverlayClick(event) {
+  if (event.target === elements.navOverlay) {
+    setNavOverlay(false);
   }
-  navDragStartY = null;
-  navDragDelta = 0;
 }
 
 function handlePageSwipeStart(event) {
@@ -1252,17 +1233,14 @@ function openModal() {
   elements.modal.classList.add("is-open");
   elements.modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  if (isMobileViewport()) {
-    setNavCollapsed(true);
-  } else {
-    setNavCollapsed(false);
-  }
+  setNavOverlay(false);
 }
 
 function closeModal() {
   elements.modal.classList.remove("is-open");
   elements.modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  setNavOverlay(false);
 }
 
 function centerHighlightedVerse() {
@@ -1317,6 +1295,7 @@ function handleModalNavSubmit(event) {
   event.preventDefault();
   const surahNumber = Number(elements.surahSelect.value) || 1;
   const ayahNumber = Number(elements.ayahInput.value) || 1;
+  setNavOverlay(false);
   if (isPageViewActive()) {
     const highlightKey = `${surahNumber}:${ayahNumber}`;
     fetchAyahPageNumber(surahNumber, ayahNumber)
@@ -1442,26 +1421,24 @@ elements.pagePrevBtn.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtn.addEventListener("click", () => changeMushafPage(1));
 elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
-elements.navHandle.addEventListener("click", toggleNavCollapsed);
-elements.navHandle.addEventListener("touchstart", handleNavPointerDown, { passive: true });
-elements.navHandle.addEventListener("touchmove", handleNavPointerMove, { passive: true });
-elements.navHandle.addEventListener("touchend", handleNavPointerUp, { passive: true });
+elements.navToggle.addEventListener("click", toggleNavOverlay);
+elements.navOverlay.addEventListener("click", handleNavOverlayClick);
 elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: true });
 elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { passive: false });
 elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: true });
 window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
-  if (isMobileViewport()) {
-    setNavCollapsed(true);
-  } else {
-    setNavCollapsed(false);
-  }
+  setNavOverlay(false);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && elements.modal.classList.contains("is-open")) {
-    closeModal();
+  if (event.key !== "Escape") return;
+  if (!elements.modal.classList.contains("is-open")) return;
+  if (elements.navOverlay && elements.navOverlay.classList.contains("is-open")) {
+    setNavOverlay(false);
+    return;
   }
+  closeModal();
 });
 
 autoResize(elements.topic);
