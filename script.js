@@ -71,6 +71,8 @@ const elements = {
   pageInput: document.getElementById("pageInput"),
   pagePrevBtn: document.getElementById("pagePrevBtn"),
   pageNextBtn: document.getElementById("pageNextBtn"),
+  pagePrevBtnBottom: document.getElementById("pagePrevBtnBottom"),
+  pageNextBtnBottom: document.getElementById("pageNextBtnBottom"),
   modalTranslation: document.getElementById("modalTranslation"),
   surahContainer: document.getElementById("surahContainer"),
 };
@@ -283,6 +285,10 @@ function setPageControlsEnabled(enabled) {
   elements.pageInput.disabled = !enabled;
   elements.pagePrevBtn.disabled = !enabled || modalState.pageNumber <= 1;
   elements.pageNextBtn.disabled = !enabled || modalState.pageNumber >= TOTAL_PAGES;
+  if (elements.pagePrevBtnBottom && elements.pageNextBtnBottom) {
+    elements.pagePrevBtnBottom.disabled = !enabled || modalState.pageNumber <= 1;
+    elements.pageNextBtnBottom.disabled = !enabled || modalState.pageNumber >= TOTAL_PAGES;
+  }
 }
 
 function syncPageControls(pageNumber) {
@@ -294,6 +300,10 @@ function syncPageControls(pageNumber) {
   if (elements.pagePrevBtn && elements.pageNextBtn) {
     elements.pagePrevBtn.disabled = page <= 1;
     elements.pageNextBtn.disabled = page >= TOTAL_PAGES;
+  }
+  if (elements.pagePrevBtnBottom && elements.pageNextBtnBottom) {
+    elements.pagePrevBtnBottom.disabled = page <= 1;
+    elements.pageNextBtnBottom.disabled = page >= TOTAL_PAGES;
   }
 }
 
@@ -1419,6 +1429,8 @@ elements.surahSelect.addEventListener("change", handleSurahSelectChange);
 elements.modalTranslation.addEventListener("change", handleModalTranslationChange);
 elements.pagePrevBtn.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtn.addEventListener("click", () => changeMushafPage(1));
+elements.pagePrevBtnBottom.addEventListener("click", () => changeMushafPage(-1));
+elements.pageNextBtnBottom.addEventListener("click", () => changeMushafPage(1));
 elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
 elements.navToggle.addEventListener("click", toggleNavOverlay);
