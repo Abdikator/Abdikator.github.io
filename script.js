@@ -13,6 +13,12 @@ const BASMALAH_REGEX = new RegExp(
     "[ٱإأآا]ل[\\u064B-\\u0652\\u0670\\u0640]*ر[\\u064B-\\u0652\\u0670\\u0640]*ح[\\u064B-\\u0652\\u0670\\u0640]*م[\\u064B-\\u0652\\u0670\\u0640]*ن[\\u064B-\\u0652\\u0670\\u0640]*\\s+" +
     "[ٱإأآا]ل[\\u064B-\\u0652\\u0670\\u0640]*ر[\\u064B-\\u0652\\u0670\\u0640]*ح[\\u064B-\\u0652\\u0670\\u0640]*ي[\\u064B-\\u0652\\u0670\\u0640]*م[\\u064B-\\u0652\\u0670\\u0640]*\\s*"
 );
+const DESKTOP_NAV_QUERY = window.matchMedia("(min-width: 701px)");
+const MUSHAF_IMAGE_BASE = "assets/mushaf-pages";
+const MUSHAF_IMAGE_EXT = "webp";
+const MUSHAF_IMAGE_FALLBACK_EXT = "png";
+const ENABLE_TEXT_PAGE_FALLBACK = true;
+const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
 
 const TRANSLATIONS = {
   en: { label: "English", edition: "en.sahih" },
@@ -42,6 +48,7 @@ const modalState = {
   surahNumber: 1,
   ayahNumber: 1,
   pageNumber: 1,
+  mushafZoom: 100,
   translationKeys: ["en"],
   arabicOnly: false,
   translationTouched: false,
@@ -61,6 +68,7 @@ const elements = {
   nextBtn: document.getElementById("nextBtn"),
   languageOptions: document.getElementById("languageOptions"),
   modal: document.getElementById("surahModal"),
+  modalCard: document.getElementById("modalCard"),
   modalTitle: document.getElementById("modalTitle"),
   modalSubtitle: document.getElementById("modalSubtitle"),
   modalNav: document.getElementById("modalNav"),
@@ -73,6 +81,7 @@ const elements = {
   pageNextBtn: document.getElementById("pageNextBtn"),
   pagePrevBtnBottom: document.getElementById("pagePrevBtnBottom"),
   pageNextBtnBottom: document.getElementById("pageNextBtnBottom"),
+  mushafZoom: document.getElementById("mushafZoom"),
   modalTranslation: document.getElementById("modalTranslation"),
   surahContainer: document.getElementById("surahContainer"),
 };
@@ -82,6 +91,7 @@ let activeEditionKey = "";
 let surahMeta = new Map();
 let pageSwipeStartX = null;
 let pageSwipeStartY = null;
+let mushafImageCache = new Map();
 
 function normalizeArabic(text) {
   return String(text || "")
@@ -215,29 +225,188 @@ function clampPageNumber(value) {
   return Math.min(Math.max(page, 1), TOTAL_PAGES);
 }
 
+function clampMushafZoom(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return MUSHAF_ZOOM_LEVELS[0];
+  }
+  return MUSHAF_ZOOM_LEVELS.reduce((closest, candidate) =>
+    Math.abs(candidate - parsed) < Math.abs(closest - parsed) ? candidate : closest
+  );
+}
+
+function formatMushafPageFile(pageNumber, options = {}) {
+  const { pad = true } = options;
+  const normalized = String(clampPageNumber(pageNumber));
+  return pad ? normalized.padStart(3, "0") : normalized;
+}
+
+function getMushafImageUrl(pageNumber, extension = MUSHAF_IMAGE_EXT, options = {}) {
+  const ext = String(extension || MUSHAF_IMAGE_EXT).replace(/^\./, "");
+  return `${MUSHAF_IMAGE_BASE}/${formatMushafPageFile(pageNumber, options)}.${ext}`;
+}
+
+function getMushafImageCandidates(pageNumber) {
+  const fallbackExt = String(MUSHAF_IMAGE_FALLBACK_EXT || "").toLowerCase();
+  const primaryExt = String(MUSHAF_IMAGE_EXT || "").toLowerCase();
+  const extensions = [primaryExt];
+  if (fallbackExt && fallbackExt !== primaryExt) {
+    extensions.push(fallbackExt);
+  }
+
+  const candidates = [];
+  extensions.forEach((ext) => {
+    // Prefer simple numeric names first: 1.png, 2.png ... 604.png
+    candidates.push(getMushafImageUrl(pageNumber, ext, { pad: false }));
+    // Then try zero-padded names: 001.png ... 604.png
+    candidates.push(getMushafImageUrl(pageNumber, ext, { pad: true }));
+  });
+
+  return [...new Set(candidates)];
+}
+
+function preloadMushafImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(url);
+    image.onerror = () => reject(new Error(`Unable to load ${url}`));
+    image.src = url;
+  });
+}
+
+async function resolveMushafImageUrl(pageNumber) {
+  const page = clampPageNumber(pageNumber);
+  if (mushafImageCache.has(page)) {
+    return mushafImageCache.get(page) || "";
+  }
+
+  const candidates = getMushafImageCandidates(page);
+
+  for (const candidate of candidates) {
+    try {
+      await preloadMushafImage(candidate);
+      mushafImageCache.set(page, candidate);
+      return candidate;
+    } catch (error) {
+      // try next candidate
+    }
+  }
+
+  mushafImageCache.set(page, "");
+  return "";
+}
+
+function buildMushafImageMarkup(options = {}) {
+  const {
+    pageNumber = 1,
+    imageUrl = "",
+    state = "ready",
+    errorMessage = "",
+    zoomPercent = MUSHAF_ZOOM_LEVELS[0],
+  } = options;
+
+  const safePageNumber = clampPageNumber(pageNumber);
+  const zoom = clampMushafZoom(zoomPercent) / 100;
+
+  const stageMarkup =
+    state === "loading"
+      ? `
+          <div class="mushaf-image-skeleton" aria-hidden="true">
+            <div class="loading-line"></div>
+            <div class="loading-line short"></div>
+            <div class="loading-line"></div>
+            <div class="loading-line short"></div>
+          </div>
+        `
+      : state === "error"
+        ? `<div class="mushaf-image-error">${escapeHtml(errorMessage || "Page image unavailable.")}</div>`
+        : `<img
+            class="mushaf-page-image"
+            src="${escapeHtml(imageUrl)}"
+            alt="Quran Mushaf page ${safePageNumber}"
+            loading="eager"
+            decoding="async"
+          >`;
+
+  return `
+    <div class="mushaf-page-canvas" style="--mushaf-zoom: ${zoom};">
+      <div class="mushaf-image-stage">
+        ${stageMarkup}
+      </div>
+    </div>
+  `;
+}
+
+function preloadAdjacentMushafPages(pageNumber) {
+  const page = clampPageNumber(pageNumber);
+  const neighbors = [page - 1, page + 1].filter(
+    (candidate) => candidate >= 1 && candidate <= TOTAL_PAGES
+  );
+  neighbors.forEach((candidate) => {
+    resolveMushafImageUrl(candidate).catch(() => {
+      // no-op; just warm the cache when available
+    });
+  });
+}
+
+function applyMushafZoomToCurrentView() {
+  if (!elements.surahContainer) return;
+  const frame = elements.surahContainer.querySelector(".mushaf-page-canvas");
+  if (!frame) return;
+  frame.style.setProperty("--mushaf-zoom", String(clampMushafZoom(modalState.mushafZoom) / 100));
+}
+
 function updateMedinaStyles() {
   if (!elements.surahContainer) return;
   const isPage = isPageViewActive();
   const isMedina = isPage;
   elements.surahContainer.classList.toggle("is-medina", isMedina);
   elements.surahContainer.classList.toggle("is-page", isPage);
+  if (elements.modalCard) {
+    elements.modalCard.classList.toggle("is-page-mode", isPage);
+  }
   setPageControlsEnabled(isPage);
+}
+
+function useInlineNav() {
+  return DESKTOP_NAV_QUERY.matches;
 }
 
 function setNavOverlay(open) {
   if (!elements.navOverlay || !elements.navToggle) return;
+  if (useInlineNav()) {
+    elements.navToggle.hidden = true;
+    elements.navOverlay.classList.add("is-open");
+    elements.navOverlay.setAttribute("aria-hidden", "false");
+    elements.navToggle.setAttribute("aria-expanded", "true");
+    elements.navToggle.setAttribute("aria-label", "Navigation controls");
+    return;
+  }
+
+  elements.navToggle.hidden = false;
   elements.navOverlay.classList.toggle("is-open", open);
   elements.navOverlay.setAttribute("aria-hidden", String(!open));
   elements.navToggle.setAttribute("aria-expanded", String(open));
   elements.navToggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
 }
 
+function syncNavigationLayout() {
+  if (useInlineNav()) {
+    setNavOverlay(true);
+    return;
+  }
+  setNavOverlay(false);
+}
+
 function toggleNavOverlay() {
+  if (useInlineNav()) return;
   if (!elements.navOverlay) return;
   setNavOverlay(!elements.navOverlay.classList.contains("is-open"));
 }
 
 function handleNavOverlayClick(event) {
+  if (useInlineNav()) return;
   if (event.target === elements.navOverlay) {
     setNavOverlay(false);
   }
@@ -285,6 +454,9 @@ function setPageControlsEnabled(enabled) {
   elements.pageInput.disabled = !enabled;
   elements.pagePrevBtn.disabled = !enabled || modalState.pageNumber <= 1;
   elements.pageNextBtn.disabled = !enabled || modalState.pageNumber >= TOTAL_PAGES;
+  if (elements.mushafZoom) {
+    elements.mushafZoom.disabled = !enabled;
+  }
   if (elements.pagePrevBtnBottom && elements.pageNextBtnBottom) {
     elements.pagePrevBtnBottom.disabled = !enabled || modalState.pageNumber <= 1;
     elements.pageNextBtnBottom.disabled = !enabled || modalState.pageNumber >= TOTAL_PAGES;
@@ -339,6 +511,10 @@ function syncModalControls(options = {}) {
     elements.modalTranslation.value = modalState.arabicOnly
       ? "arabic"
       : modalState.translationKeys[0] || "en";
+  }
+
+  if (elements.mushafZoom) {
+    elements.mushafZoom.value = String(clampMushafZoom(modalState.mushafZoom));
   }
 }
 
@@ -927,18 +1103,24 @@ function buildPageMarkup(ayahs, highlightKey, pageNumber, surahLabel, options = 
     })
     .join(" ");
 
-  const safeLabel = surahLabel ? escapeHtml(surahLabel) : "Quran";
+  const safePageNumber = Number(pageNumber) || 1;
+  const safeLabel = surahLabel ? escapeHtml(surahLabel) : "المصحف الشريف";
+  const pageNumberArabic = toArabicIndic(safePageNumber);
+  const parityClass = safePageNumber % 2 === 0 ? "is-even" : "is-odd";
 
   return `
-    <div class="page-frame">
+    <div class="page-frame ${parityClass}">
+      <div class="page-spine-shadow" aria-hidden="true"></div>
       <div class="page-header">
-        <span>${safeLabel}</span>
-        <span>Page ${pageNumber}</span>
+        <span class="page-meta">${safeLabel}</span>
       </div>
-      <div class="page-text">${pageText}</div>
+      <div class="page-text-wrap">
+        <div class="page-text">${pageText}</div>
+      </div>
       <div class="page-footer">
-        <span>${safeLabel}</span>
-        <span>Page ${pageNumber}</span>
+        <span class="page-number-medallion" aria-label="Page ${safePageNumber}">
+          ${pageNumberArabic}
+        </span>
       </div>
     </div>
   `;
@@ -1049,50 +1231,61 @@ async function openPageView(pageNumber, options = {}) {
 
   elements.modalTitle.textContent = "Quran Mushaf";
   elements.modalSubtitle.textContent = `Page ${targetPage}`;
-  elements.surahContainer.innerHTML = "<div class=\"empty-state\">Loading page...</div>";
+  elements.surahContainer.innerHTML = buildMushafImageMarkup({
+    pageNumber: targetPage,
+    state: "loading",
+    zoomPercent: modalState.mushafZoom,
+  });
 
   syncPageControls(targetPage);
+  syncModalControls();
 
   try {
-    let data;
-    let translationData = null;
     const translationEdition =
       !modalState.arabicOnly && modalState.translationKeys.length
         ? TRANSLATIONS[modalState.translationKeys[0]]?.edition
         : null;
-    try {
-      const response = await fetch(
-        `https://api.alquran.cloud/v1/page/${targetPage}/${ARABIC_MEDINA_EDITION}`
-      );
-      if (!response.ok) {
-        throw new Error("Page request failed");
+    const arabicPagePromise = (async () => {
+      try {
+        const response = await fetch(
+          `https://api.alquran.cloud/v1/page/${targetPage}/${ARABIC_MEDINA_EDITION}`
+        );
+        if (!response.ok) {
+          throw new Error("Page request failed");
+        }
+        return response.json();
+      } catch (error) {
+        const fallbackResponse = await fetch(
+          `https://api.alquran.cloud/v1/page/${targetPage}/${ARABIC_EDITION}`
+        );
+        if (!fallbackResponse.ok) {
+          throw error;
+        }
+        return fallbackResponse.json();
       }
-      data = await response.json();
-    } catch (error) {
-      const fallbackResponse = await fetch(
-        `https://api.alquran.cloud/v1/page/${targetPage}/${ARABIC_EDITION}`
-      );
-      if (!fallbackResponse.ok) {
-        throw error;
-      }
-      data = await fallbackResponse.json();
-    }
+    })();
 
-    const parsed = parsePageData(data, highlightKey);
-    let translationMarkup = "";
-    if (translationEdition) {
+    const translationPromise = (async () => {
+      if (!translationEdition) return null;
       try {
         const translationResponse = await fetch(
           `https://api.alquran.cloud/v1/page/${targetPage}/${translationEdition}`
         );
-        if (translationResponse.ok) {
-          translationData = await translationResponse.json();
-        }
+        if (!translationResponse.ok) return null;
+        return translationResponse.json();
       } catch (error) {
-        translationData = null;
+        return null;
       }
-    }
+    })();
 
+    const [data, imageUrl, translationData] = await Promise.all([
+      arabicPagePromise,
+      resolveMushafImageUrl(targetPage),
+      translationPromise,
+    ]);
+
+    const parsed = parsePageData(data, highlightKey);
+    let translationMarkup = "";
     if (translationData?.data?.ayahs?.length) {
       const label = TRANSLATIONS[modalState.translationKeys[0]]?.label || "Translation";
       translationMarkup = buildPageTranslationPanel(
@@ -1102,9 +1295,40 @@ async function openPageView(pageNumber, options = {}) {
       );
     }
 
-    elements.surahContainer.innerHTML =
-      (parsed.html || "<div class=\"empty-state\">Unable to load this page.</div>") +
-      translationMarkup;
+    const expectedCandidates = getMushafImageCandidates(parsed.pageNumber);
+    const expectedPathLabel = expectedCandidates.join(", ");
+
+    if (imageUrl) {
+      elements.surahContainer.innerHTML =
+        buildMushafImageMarkup({
+          pageNumber: parsed.pageNumber,
+          surahLabel: parsed.surahLabel,
+          imageUrl,
+          state: "ready",
+          zoomPercent: modalState.mushafZoom,
+        }) + translationMarkup;
+      preloadAdjacentMushafPages(parsed.pageNumber);
+    } else if (ENABLE_TEXT_PAGE_FALLBACK) {
+      const fallbackNotice = `
+        <div class="mushaf-image-warning">
+          Page image missing for page ${parsed.pageNumber}. Showing text fallback.
+          <div class="mushaf-image-path">Expected: ${escapeHtml(expectedPathLabel)}</div>
+        </div>
+      `;
+      elements.surahContainer.innerHTML =
+        fallbackNotice +
+        (parsed.html || "<div class=\"empty-state\">Unable to load this page.</div>") +
+        translationMarkup;
+    } else {
+      elements.surahContainer.innerHTML =
+        buildMushafImageMarkup({
+          pageNumber: parsed.pageNumber,
+          surahLabel: parsed.surahLabel,
+          state: "error",
+          errorMessage: `Page image unavailable. Add one of: ${expectedPathLabel}`,
+          zoomPercent: modalState.mushafZoom,
+        }) + translationMarkup;
+    }
 
     const nextMeta = parsed.highlightMeta || parsed.defaultMeta;
     if (nextMeta) {
@@ -1122,13 +1346,35 @@ async function openPageView(pageNumber, options = {}) {
 
     syncPageControls(parsed.pageNumber);
     syncModalControls();
+    applyMushafZoomToCurrentView();
 
     requestAnimationFrame(() => {
       centerHighlightedVerse();
     });
   } catch (error) {
-    elements.surahContainer.innerHTML =
-      "<div class=\"empty-state\">Unable to load this page.</div>";
+    const cachedOrResolvedImageUrl = await resolveMushafImageUrl(targetPage).catch(() => "");
+    if (cachedOrResolvedImageUrl) {
+      elements.surahContainer.innerHTML = `
+        <div class="mushaf-image-warning">
+          Verse metadata is unavailable right now. Showing page image only.
+        </div>
+        ${buildMushafImageMarkup({
+          pageNumber: targetPage,
+          imageUrl: cachedOrResolvedImageUrl,
+          state: "ready",
+          zoomPercent: modalState.mushafZoom,
+        })}
+      `;
+      applyMushafZoomToCurrentView();
+      return;
+    }
+
+    elements.surahContainer.innerHTML = buildMushafImageMarkup({
+      pageNumber: targetPage,
+      state: "error",
+      errorMessage: "Unable to load this page right now.",
+      zoomPercent: modalState.mushafZoom,
+    });
   }
 }
 
@@ -1243,7 +1489,7 @@ function openModal() {
   elements.modal.classList.add("is-open");
   elements.modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
-  setNavOverlay(false);
+  syncNavigationLayout();
 }
 
 function closeModal() {
@@ -1347,6 +1593,12 @@ function handleModalTranslationChange() {
   );
 }
 
+function handleMushafZoomChange() {
+  if (!elements.mushafZoom) return;
+  modalState.mushafZoom = clampMushafZoom(elements.mushafZoom.value);
+  applyMushafZoomToCurrentView();
+}
+
 function changeMushafPage(delta) {
   if (!isPageViewActive()) return;
   const nextPage = clampPageNumber(modalState.pageNumber + delta);
@@ -1427,6 +1679,7 @@ elements.modal.addEventListener("click", handleModalClick);
 elements.modalNav.addEventListener("submit", handleModalNavSubmit);
 elements.surahSelect.addEventListener("change", handleSurahSelectChange);
 elements.modalTranslation.addEventListener("change", handleModalTranslationChange);
+elements.mushafZoom.addEventListener("change", handleMushafZoomChange);
 elements.pagePrevBtn.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtn.addEventListener("click", () => changeMushafPage(1));
 elements.pagePrevBtnBottom.addEventListener("click", () => changeMushafPage(-1));
@@ -1440,13 +1693,17 @@ elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { pas
 elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: true });
 window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
-  setNavOverlay(false);
+  syncNavigationLayout();
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (!elements.modal.classList.contains("is-open")) return;
-  if (elements.navOverlay && elements.navOverlay.classList.contains("is-open")) {
+  if (
+    elements.navOverlay &&
+    elements.navOverlay.classList.contains("is-open") &&
+    !useInlineNav()
+  ) {
     setNavOverlay(false);
     return;
   }
@@ -1455,6 +1712,7 @@ document.addEventListener("keydown", (event) => {
 
 autoResize(elements.topic);
 updateEditionKey();
+syncNavigationLayout();
 renderEmptyState("Search for a topic to see results.");
 
 function applyLanguageFromParams(langParam) {

@@ -458,11 +458,12 @@
       position: fixed;
       inset: 0;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      align-items: stretch;
+      justify-content: stretch;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.2s ease;
+      z-index: 30;
     }
 
     .modal.is-open {
@@ -479,16 +480,19 @@
 
     .modal-card {
       position: relative;
-      width: min(1100px, 94vw);
-      max-height: 85vh;
+      width: 100vw;
+      max-width: none;
+      height: 100dvh;
+      max-height: 100dvh;
       background: var(--surface);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 18px;
+      border: none;
+      border-radius: 0;
+      padding: calc(14px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+        calc(14px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
       display: flex;
       flex-direction: column;
       gap: 14px;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+      box-shadow: none;
       animation: pop 0.25s ease;
       z-index: 1;
     }
@@ -519,6 +523,7 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
+      margin-left: auto;
     }
 
     .modal-title {
@@ -545,13 +550,13 @@
     }
 
     .nav-icon {
+      display: none;
       width: 32px;
       height: 32px;
       border-radius: 50%;
       border: 1px solid rgba(255, 255, 255, 0.16);
       background: rgba(6, 18, 15, 0.6);
       color: var(--text);
-      display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
@@ -601,34 +606,31 @@
     }
 
     .nav-overlay {
-      position: absolute;
-      inset: 0;
-      background: rgba(3, 6, 5, 0.38);
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-      backdrop-filter: blur(6px);
-      z-index: 5;
-      padding: 80px 16px 24px;
+      position: static;
+      inset: auto;
+      background: transparent;
+      display: block;
+      opacity: 1;
+      pointer-events: auto;
+      transition: none;
+      backdrop-filter: none;
+      z-index: 1;
+      padding: 0;
     }
 
     .nav-overlay.is-open {
       opacity: 1;
-      pointer-events: auto;
     }
 
     .nav-panel {
-      width: min(520px, 92vw);
-      background: rgba(9, 22, 18, 0.88);
+      width: 100%;
+      background: rgba(9, 22, 18, 0.72);
       border-radius: 16px;
       border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      box-shadow: none;
       padding: 16px;
-      max-height: calc(100vh - 120px);
-      overflow-y: auto;
+      max-height: none;
+      overflow: visible;
       backdrop-filter: blur(10px);
     }
 
@@ -675,8 +677,15 @@
     }
 
     .surah-container.is-page {
-      display: block;
-      padding: 18px;
+      display: grid;
+      justify-items: center;
+      align-content: start;
+      gap: 18px;
+      padding: 22px;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(247, 219, 157, 0.2), transparent 55%),
+        linear-gradient(165deg, rgba(10, 24, 19, 0.92), rgba(6, 15, 12, 0.97));
+      border-color: rgba(201, 171, 111, 0.28);
     }
 
     .page-nav {
@@ -728,15 +737,20 @@
     }
 
     .page-frame {
-      border-radius: 18px;
-      padding: 22px 24px;
-      background: linear-gradient(180deg, rgba(255, 251, 244, 0.98), rgba(249, 243, 232, 0.98));
-      border: 1px solid rgba(86, 114, 82, 0.35);
-      box-shadow: inset 0 0 0 2px rgba(166, 196, 148, 0.25), 0 24px 50px rgba(0, 0, 0, 0.35);
-      min-height: 60vh;
+      width: min(100%, 760px);
+      min-height: clamp(560px, 78vh, 940px);
+      border-radius: 24px;
+      padding: clamp(18px, 2vw, 26px);
+      background:
+        radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.45), transparent 45%),
+        linear-gradient(180deg, rgba(255, 252, 246, 0.99), rgba(244, 233, 209, 0.98));
+      border: 1px solid rgba(122, 96, 48, 0.55);
+      box-shadow:
+        0 30px 58px rgba(0, 0, 0, 0.4),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.55);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
       position: relative;
       overflow: hidden;
     }
@@ -745,40 +759,103 @@
       content: "";
       position: absolute;
       inset: 10px;
-      border-radius: 14px;
-      border: 1px solid rgba(86, 114, 82, 0.35);
+      border-radius: 17px;
+      border: 2px solid rgba(141, 113, 62, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
       pointer-events: none;
+      z-index: 0;
     }
 
     .page-frame::after {
       content: "";
       position: absolute;
-      inset: 24px;
-      border-radius: 10px;
-      border: 1px dashed rgba(109, 163, 122, 0.35);
+      inset: 22px;
+      border-radius: 13px;
+      border: 1px solid rgba(124, 99, 53, 0.35);
+      background-image: radial-gradient(rgba(74, 56, 23, 0.18) 0.7px, transparent 0.7px);
+      background-size: 14px 14px;
+      opacity: 0.3;
       pointer-events: none;
+      z-index: 0;
     }
 
-    .page-header,
-    .page-footer {
+    .page-spine-shadow {
+      position: absolute;
+      top: 20px;
+      bottom: 20px;
+      width: 28px;
+      border-radius: 999px;
+      pointer-events: none;
+      opacity: 0.35;
+      filter: blur(1px);
+      z-index: 0;
+    }
+
+    .page-frame.is-odd .page-spine-shadow {
+      left: 15px;
+      background: linear-gradient(90deg, rgba(71, 55, 30, 0.45), transparent);
+    }
+
+    .page-frame.is-even .page-spine-shadow {
+      right: 15px;
+      background: linear-gradient(270deg, rgba(71, 55, 30, 0.45), transparent);
+    }
+
+    .page-header {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      font-size: 0.85rem;
-      color: rgba(50, 70, 58, 0.8);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      min-height: 34px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .page-meta {
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: clamp(1.05rem, 2vw, 1.3rem);
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      color: rgba(45, 59, 46, 0.92);
+      border-radius: 999px;
+      border: 1px solid rgba(120, 93, 46, 0.45);
+      background: linear-gradient(180deg, rgba(250, 241, 220, 0.96), rgba(236, 220, 186, 0.86));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+      padding: 5px 24px 7px;
+      text-align: center;
+    }
+
+    .page-text-wrap {
+      position: relative;
+      border-radius: 16px;
+      border: 1px solid rgba(126, 100, 54, 0.28);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(253, 247, 232, 0.12));
+      padding: clamp(20px, 3vw, 34px) clamp(16px, 3vw, 28px) clamp(18px, 2.4vw, 24px);
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    .page-text-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background:
+        radial-gradient(circle at 20% 25%, rgba(111, 84, 44, 0.08), transparent 35%),
+        radial-gradient(circle at 80% 80%, rgba(92, 66, 34, 0.08), transparent 38%);
+      pointer-events: none;
     }
 
     .page-text {
       font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 1.7rem;
-      line-height: 2.6;
+      font-size: clamp(1.72rem, 2.45vw, 2.04rem);
+      line-height: 2.45;
       direction: rtl;
       text-align: justify;
       text-justify: inter-word;
-      color: #1f2b22;
+      word-spacing: 0.03em;
+      color: #1d2b21;
       position: relative;
+      z-index: 1;
     }
 
     .page-ayah {
@@ -786,9 +863,9 @@
     }
 
     .page-ayah.is-highlighted .ayah-text {
-      background: rgba(242, 178, 105, 0.25);
-      border-radius: 10px;
-      padding: 0 6px;
+      border-radius: 8px;
+      box-shadow: inset 0 -0.58em 0 rgba(217, 170, 96, 0.38);
+      padding: 0 4px;
     }
 
     .ayah-text {
@@ -799,13 +876,13 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 1.7em;
-      height: 1.7em;
-      margin: 0 6px;
+      width: 1.86em;
+      height: 1.86em;
+      margin: 0 0.22em;
       border-radius: 50%;
       border: none;
-      color: rgba(38, 64, 47, 0.85);
-      font-size: 0.68em;
+      color: rgba(43, 66, 48, 0.88);
+      font-size: 0.66em;
       position: relative;
       background: transparent;
       vertical-align: middle;
@@ -827,17 +904,18 @@
       position: relative;
       z-index: 1;
       font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 0.78em;
-      color: rgba(38, 64, 47, 0.85);
+      font-size: 0.76em;
+      color: rgba(37, 60, 43, 0.9);
     }
 
     .basmalah-line {
       text-align: center;
       font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 1.6rem;
-      line-height: 2.2;
-      color: rgba(33, 49, 40, 0.9);
-      margin: 6px 0 10px;
+      font-size: clamp(1.45rem, 2.2vw, 1.82rem);
+      line-height: 2.1;
+      color: rgba(33, 50, 39, 0.92);
+      margin: 2px 0 14px;
+      letter-spacing: 0.01em;
     }
 
     .surah-divider {
@@ -845,8 +923,8 @@
       align-items: center;
       justify-content: center;
       gap: 12px;
-      margin: 10px 0 6px;
-      color: rgba(38, 64, 47, 0.9);
+      margin: 10px 0 12px;
+      color: rgba(44, 59, 45, 0.92);
     }
 
     .surah-divider::before,
@@ -854,28 +932,169 @@
       content: "";
       flex: 1;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(109, 163, 122, 0.7), transparent);
+      max-width: 140px;
+      background: linear-gradient(90deg, transparent, rgba(120, 93, 48, 0.58), transparent);
     }
 
     .surah-title {
+      position: relative;
+      min-width: min(100%, 340px);
+      padding: 7px 34px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(116, 89, 43, 0.58);
+      background: linear-gradient(180deg, rgba(250, 241, 220, 0.97), rgba(237, 219, 181, 0.84));
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+        0 6px 14px rgba(67, 53, 28, 0.2);
       font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 1.3rem;
-      letter-spacing: 0.08em;
+      font-size: clamp(1.15rem, 2vw, 1.34rem);
+      letter-spacing: 0.02em;
+      line-height: 1.2;
       text-transform: none;
       text-align: center;
+      color: rgba(42, 58, 44, 0.95);
+    }
+
+    .surah-title::before,
+    .surah-title::after {
+      content: "۞";
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.95rem;
+      color: rgba(97, 73, 36, 0.82);
+    }
+
+    .surah-title::before {
+      left: 12px;
+    }
+
+    .surah-title::after {
+      right: 12px;
     }
 
     .surah-title span {
       display: block;
-      font-size: 0.75rem;
-      letter-spacing: 0.2em;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: rgba(38, 64, 47, 0.6);
-      margin-top: 2px;
+      color: rgba(57, 71, 56, 0.64);
+      margin-top: 3px;
+    }
+
+    .page-footer {
+      margin-top: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .page-number-medallion {
+      width: 2.75em;
+      height: 2.75em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      font-size: 1.03rem;
+      line-height: 1;
+      color: rgba(37, 56, 41, 0.94);
+      background: linear-gradient(180deg, rgba(252, 246, 232, 0.98), rgba(238, 220, 181, 0.9));
+      border: 1px solid rgba(112, 84, 40, 0.55);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+        0 5px 10px rgba(72, 54, 27, 0.2);
+    }
+
+    .mushaf-page-canvas {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .mushaf-image-stage {
+      width: 100%;
+      height: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
+      transform: scale(var(--mushaf-zoom, 1));
+      transition: transform 0.2s ease;
+    }
+
+    .mushaf-page-image {
+      display: block;
+      width: auto;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 0;
+      border: none;
+      background: #ffffff;
+      box-shadow: none;
+    }
+
+    .mushaf-image-skeleton {
+      width: min(560px, 92%);
+      aspect-ratio: 1 / 1.47;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(10, 24, 19, 0.62);
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .mushaf-image-error {
+      border-radius: 12px;
+      border: 1px dashed rgba(255, 255, 255, 0.24);
+      background: rgba(9, 20, 17, 0.7);
+      padding: 18px 14px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .mushaf-image-warning {
+      width: min(100%, 980px);
+      margin: 0 auto;
+      border-radius: 12px;
+      border: 1px solid rgba(242, 178, 105, 0.5);
+      background: rgba(242, 178, 105, 0.1);
+      color: #fde7c8;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .mushaf-image-path {
+      margin-top: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.78rem;
+      color: rgba(253, 231, 200, 0.9);
+      word-break: break-all;
     }
 
     .page-translation-panel {
+      width: min(100%, 980px);
       margin-top: 16px;
+      margin-left: auto;
+      margin-right: auto;
       background: rgba(6, 18, 15, 0.75);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 14px;
@@ -971,6 +1190,106 @@
       }
     }
 
+    @media (min-width: 701px) {
+      .modal-card.is-page-mode {
+        display: grid;
+        grid-template-columns: minmax(210px, 248px) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-areas:
+          "sidebar content";
+        gap: 0 10px;
+        padding: 0;
+      }
+
+      .modal-card.is-page-mode .modal-header {
+        position: absolute;
+        top: calc(4px + env(safe-area-inset-top));
+        right: calc(8px + env(safe-area-inset-right));
+        z-index: 15;
+        margin: 0;
+        gap: 0;
+      }
+
+      .modal-card.is-page-mode .modal-header > div:first-child {
+        display: none;
+      }
+
+      .modal-card.is-page-mode .modal-actions {
+        gap: 0;
+      }
+
+      .modal-card.is-page-mode .nav-overlay {
+        grid-area: sidebar;
+        height: 100%;
+        min-height: 0;
+        padding: 8px 0 8px 8px;
+      }
+
+      .modal-card.is-page-mode .nav-panel {
+        height: 100%;
+        max-height: none;
+        padding: 10px;
+        border-radius: 12px;
+      }
+
+      .modal-card.is-page-mode .modal-control-body {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .modal-card.is-page-mode .control-group {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .modal-card.is-page-mode #goBtn {
+        width: 100%;
+      }
+
+      .modal-card.is-page-mode .surah-container {
+        grid-area: content;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .modal-card.is-page-mode .page-nav {
+        display: none !important;
+      }
+
+      .modal-card.is-page-mode .mushaf-page-canvas {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+
+      .modal-card.is-page-mode .mushaf-image-stage {
+        width: 100%;
+        height: 100%;
+      }
+
+      .modal-card.is-page-mode .mushaf-page-image {
+        width: auto;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      .modal-card.is-page-mode .page-translation-panel {
+        width: 100%;
+      }
+    }
+
     @media (max-width: 700px) {
       body {
         padding: 24px 16px 48px;
@@ -992,11 +1311,12 @@
 
       .modal-card {
         width: 100vw;
-        max-height: 100vh;
-        height: 100vh;
+        max-height: 100dvh;
+        height: 100dvh;
         border-radius: 0;
         padding: calc(8px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right))
           calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+        gap: 8px;
       }
 
       .modal-header {
@@ -1007,6 +1327,36 @@
 
       .modal-header .btn {
         align-self: center;
+      }
+
+      .nav-icon {
+        display: inline-flex;
+      }
+
+      .nav-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(3, 6, 5, 0.38);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        backdrop-filter: blur(6px);
+        z-index: 5;
+        padding: 64px 12px 16px;
+      }
+
+      .nav-overlay.is-open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .nav-panel {
+        width: 100%;
+        max-height: calc(100dvh - 104px);
+        overflow-y: auto;
       }
 
       .control-group {
@@ -1034,23 +1384,51 @@
         min-height: 0;
       }
 
-      .page-frame {
+      .mushaf-page-canvas {
         padding: 8px;
-        min-height: 100%;
-        border: none;
-        box-shadow: none;
-        border-radius: 12px;
       }
 
-      .page-frame::before,
+      .mushaf-image-stage {
+        width: 100%;
+      }
+
+      .page-frame {
+        width: 100%;
+        min-height: 0;
+        padding: 10px;
+        border-radius: 16px;
+      }
+
+      .page-frame::before {
+        display: none;
+      }
+
       .page-frame::after {
         display: none;
       }
 
+      .page-spine-shadow {
+        top: 14px;
+        bottom: 14px;
+      }
+
+      .page-text-wrap {
+        border-radius: 12px;
+        padding: 14px 10px 14px;
+      }
+
+      .page-meta {
+        padding: 4px 16px 6px;
+      }
+
+      .surah-title {
+        min-width: min(100%, 300px);
+        padding: 6px 30px 8px;
+      }
+
       .surah-container.is-page {
-        padding: 0;
-        background: transparent;
-        border: none;
+        padding: 4px;
+        gap: 10px;
       }
 
       .page-nav {
@@ -1062,13 +1440,6 @@
         font-size: 0.8rem;
       }
 
-      .nav-overlay {
-        padding: 64px 12px 16px;
-      }
-
-      .nav-panel {
-        width: 100%;
-      }
     }
 
     @media (max-width: 520px) {
@@ -1086,8 +1457,13 @@
       }
 
       .page-text {
-        font-size: 1.4rem;
-        line-height: 2.2;
+        font-size: clamp(1.5rem, 6.7vw, 1.86rem);
+        line-height: 2.34;
+      }
+
+      .verse-arabic {
+        font-size: 1.42rem;
+        line-height: 2.18;
       }
     }
   </style>
@@ -1165,7 +1541,7 @@
 
   <div id="surahModal" class="modal" aria-hidden="true">
     <div class="modal-overlay" data-action="close"></div>
-    <div class="modal-card" role="dialog" aria-modal="true">
+    <div id="modalCard" class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-header">
         <div>
           <div id="modalTitle" class="modal-title">Surah</div>
@@ -1208,6 +1584,14 @@
                   <option value="ur">Urdu</option>
                   <option value="fa">Farsi</option>
                   <option value="tr">Turkish</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label class="control-label" for="mushafZoom">Zoom</label>
+                <select id="mushafZoom" class="control-input" aria-label="Mushaf zoom level">
+                  <option value="100">100%</option>
+                  <option value="125">125%</option>
+                  <option value="150">150%</option>
                 </select>
               </div>
               <button class="btn btn-primary btn-small" id="goBtn" type="submit">Go</button>
