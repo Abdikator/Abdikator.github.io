@@ -698,6 +698,9 @@
       pointer-events: none;
       transition: opacity 0.16s ease;
       z-index: 2;
+      overflow: hidden;
+      --wheel-size: 236px;
+      --wheel-chip-radius: 110px;
     }
 
     .mushaf-wheel-overlay.is-active {
@@ -713,20 +716,21 @@
       inset: 0;
       background:
         radial-gradient(
-          circle at var(--wheel-center-x, 82%) var(--wheel-center-y, 50%),
+          circle at var(--wheel-center-x, calc(100% + 6px)) var(--wheel-center-y, 50%),
           rgba(7, 16, 13, 0.06) 0%,
-          rgba(7, 16, 13, 0.16) 28%,
-          rgba(7, 16, 13, 0.34) 58%,
-          rgba(7, 16, 13, 0.48) 100%
+          rgba(7, 16, 13, 0.16) 20%,
+          rgba(7, 16, 13, 0.3) 45%,
+          rgba(7, 16, 13, 0.42) 70%,
+          rgba(7, 16, 13, 0.52) 100%
         );
     }
 
     .mushaf-wheel {
       position: absolute;
-      left: var(--wheel-center-x, 82%);
+      left: var(--wheel-center-x, calc(100% + 6px));
       top: var(--wheel-center-y, 50%);
-      width: 216px;
-      height: 216px;
+      width: var(--wheel-size);
+      height: var(--wheel-size);
       transform: translate(-50%, -50%);
       pointer-events: none;
       direction: rtl;
@@ -736,9 +740,9 @@
       position: absolute;
       inset: 0;
       border-radius: 50%;
-      border: 1px solid rgba(218, 193, 142, 0.58);
+      border: 2px solid rgba(218, 193, 142, 0.58);
       background:
-        radial-gradient(circle at 50% 50%, rgba(255, 236, 197, 0.03) 0 32%, transparent 33%),
+        radial-gradient(circle at 50% 50%, rgba(255, 236, 197, 0.03) 0 45%, transparent 46%),
         conic-gradient(
           from 0deg,
           rgba(217, 183, 117, 0.36),
@@ -752,29 +756,42 @@
 
     .mushaf-wheel-focus {
       position: absolute;
-      inset: 28%;
-      border-radius: 50%;
-      background: rgba(8, 19, 16, 0.88);
+      left: 24%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      min-width: 112px;
+      max-width: 150px;
+      border-radius: 16px;
+      background: rgba(8, 19, 16, 0.9);
       border: 1px solid rgba(223, 196, 140, 0.54);
       box-shadow: inset 0 0 0 1px rgba(255, 240, 206, 0.18);
       display: grid;
-      place-content: center;
-      gap: 2px;
+      place-content: center start;
+      gap: 3px;
       text-align: center;
-      padding: 10px;
+      padding: 8px 10px;
       color: #fceac5;
     }
 
     .mushaf-wheel-focus-number {
-      font-size: 0.7rem;
-      letter-spacing: 0.12em;
+      font-size: 0.62rem;
+      letter-spacing: 0.08em;
       color: rgba(252, 233, 194, 0.78);
     }
 
     .mushaf-wheel-focus-name {
       font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 1.08rem;
-      line-height: 1.3;
+      font-size: 0.98rem;
+      line-height: 1.24;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mushaf-wheel-focus-hint {
+      font-size: 0.57rem;
+      letter-spacing: 0.1em;
+      color: rgba(252, 233, 194, 0.56);
     }
 
     .mushaf-wheel-neighbors {
@@ -789,16 +806,16 @@
       transform:
         translate(-50%, -50%)
         rotate(var(--chip-angle, 0deg))
-        translateY(-104px)
+        translateY(calc(var(--wheel-chip-radius, 110px) * -1))
         rotate(calc(var(--chip-angle, 0deg) * -1));
-      min-width: 96px;
-      max-width: 160px;
+      min-width: 82px;
+      max-width: 144px;
       border-radius: 999px;
       border: 1px solid rgba(215, 189, 139, 0.46);
       background: rgba(8, 20, 16, 0.86);
       color: #fce6b8;
-      padding: 5px 9px;
-      font-size: 0.66rem;
+      padding: 4px 8px;
+      font-size: 0.62rem;
       line-height: 1.22;
       text-align: center;
       white-space: nowrap;
@@ -1669,13 +1686,13 @@
     }
 
     @media (max-width: 700px) and (pointer: coarse) {
-      .mushaf-wheel {
-        width: 204px;
-        height: 204px;
+      .mushaf-wheel-overlay {
+        --wheel-size: 220px;
+        --wheel-chip-radius: 102px;
       }
 
       .mushaf-wheel-chip {
-        max-width: 148px;
+        max-width: 138px;
       }
     }
 
@@ -1703,20 +1720,25 @@
         line-height: 2.18;
       }
 
-      .mushaf-wheel {
-        width: 188px;
-        height: 188px;
+      .mushaf-wheel-overlay {
+        --wheel-size: 200px;
+        --wheel-chip-radius: 92px;
       }
 
       .mushaf-wheel-chip {
-        transform:
-          translate(-50%, -50%)
-          rotate(var(--chip-angle, 0deg))
-          translateY(-90px)
-          rotate(calc(var(--chip-angle, 0deg) * -1));
-        min-width: 84px;
-        max-width: 130px;
-        font-size: 0.62rem;
+        min-width: 78px;
+        max-width: 124px;
+        font-size: 0.58rem;
+      }
+
+      .mushaf-wheel-focus {
+        min-width: 98px;
+        max-width: 136px;
+        padding: 7px 8px;
+      }
+
+      .mushaf-wheel-focus-name {
+        font-size: 0.9rem;
       }
     }
   </style>

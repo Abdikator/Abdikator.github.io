@@ -24,8 +24,14 @@ const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
 const WHEEL_LONG_PRESS_MS = 380;
 const WHEEL_EDGE_ZONE_PX = 36;
 const WHEEL_CANCEL_MOVE_PX = 12;
-const WHEEL_STEP_DEGREES = 10;
+const WHEEL_STEP_DEGREES = 4;
 const WHEEL_VISIBLE_NEIGHBORS = 3;
+const WHEEL_ARC_MIN_ANGLE = 124;
+const WHEEL_ARC_MAX_ANGLE = 236;
+const WHEEL_ACCELERATION_DISTANCE_PX = 22;
+const WHEEL_MAX_ACCELERATION_BOOST = 9;
+const WHEEL_SPEED_BOOST_SCALE = 1.35;
+const WHEEL_ARC_OFFSCREEN_X = 6;
 const DEFAULT_MAIN_LANGUAGE_KEY = "en";
 const DEFAULT_MODAL_MODE = "browse";
 const ROUTE_PARAM_KEYS = [
@@ -250,8 +256,13 @@ let wheelState = {
   centerY: null,
   baseSurah: 1,
   selectedSurah: 1,
+  activationAngle: 180,
   lastAngle: null,
   accumulatedAngle: 0,
+  lastTouchX: null,
+  lastTouchY: null,
+  lastMoveTs: null,
+  radius: 0,
   isCommitting: false,
 };
 let lastInlineNavMode = DESKTOP_NAV_QUERY.matches;
@@ -644,8 +655,13 @@ function resetMushafWheelTrackingState() {
   wheelState.centerY = null;
   wheelState.baseSurah = clampSurahNumber(modalState.surahNumber || 1);
   wheelState.selectedSurah = wheelState.baseSurah;
+  wheelState.activationAngle = 180;
   wheelState.lastAngle = null;
   wheelState.accumulatedAngle = 0;
+  wheelState.lastTouchX = null;
+  wheelState.lastTouchY = null;
+  wheelState.lastMoveTs = null;
+  wheelState.radius = 0;
 }
 
 function cancelMushafWheelInteraction() {
@@ -680,11 +696,23 @@ function getWheelAngleDegrees(clientX, clientY) {
   return Math.atan2(clientY - wheelState.centerY, clientX - wheelState.centerX) * (180 / Math.PI);
 }
 
-function normalizeAngleDelta(delta) {
-  let normalized = delta;
-  while (normalized > 180) normalized -= 360;
-  while (normalized < -180) normalized += 360;
+function normalizeAngle360(angle) {
+  if (!Number.isFinite(angle)) return 0;
+  let normalized = angle % 360;
+  if (normalized < 0) normalized += 360;
   return normalized;
+}
+
+function clampWheelArcAngle(angle) {
+  const normalized = normalizeAngle360(angle);
+  if (normalized < WHEEL_ARC_MIN_ANGLE) return WHEEL_ARC_MIN_ANGLE;
+  if (normalized > WHEEL_ARC_MAX_ANGLE) return WHEEL_ARC_MAX_ANGLE;
+  return normalized;
+}
+
+function getWheelDistanceFromCenter(clientX, clientY) {
+  if (wheelState.centerX === null || wheelState.centerY === null) return 0;
+  return Math.hypot(clientX - wheelState.centerX, clientY - wheelState.centerY);
 }
 
 function getSurahArabicNameFromFallback(surahNumber) {
@@ -708,22 +736,26 @@ function renderMushafWheel() {
   if (!elements.mushafWheelFocus || !elements.mushafWheelNeighbors) return;
   const selectedSurah = clampSurahNumber(wheelState.selectedSurah || modalState.surahNumber || 1);
   wheelState.selectedSurah = selectedSurah;
+  const progressPercent = Math.round((selectedSurah / TOTAL_SURAHS) * 100);
 
   elements.mushafWheelFocus.innerHTML = `
-    <span class="mushaf-wheel-focus-number">${selectedSurah}</span>
+    <span class="mushaf-wheel-focus-number">${String(selectedSurah).padStart(3, "0")} / ${TOTAL_SURAHS}</span>
     <span class="mushaf-wheel-focus-name">${escapeHtml(getSurahArabicName(selectedSurah))}</span>
+    <span class="mushaf-wheel-focus-hint">${progressPercent}%</span>
   `;
 
   const neighbors = [];
-  const angleStep = 18;
+  const angleStep = 13;
+  const baseAngle = 270;
   for (let offset = -WHEEL_VISIBLE_NEIGHBORS; offset <= WHEEL_VISIBLE_NEIGHBORS; offset += 1) {
     if (offset === 0) continue;
     const candidateSurah = selectedSurah + offset;
     if (candidateSurah < 1 || candidateSurah > TOTAL_SURAHS) continue;
+    const chipAngle = Math.min(314, Math.max(226, baseAngle + (offset * angleStep)));
     neighbors.push(`
       <div
         class="mushaf-wheel-chip"
-        style="--chip-angle:${offset * angleStep}deg;--chip-distance:${Math.abs(offset)};"
+        style="--chip-angle:${chipAngle}deg;--chip-distance:${Math.abs(offset)};"
       >
         ${escapeHtml(getSurahArabicLabel(candidateSurah))}
       </div>
@@ -745,11 +777,9 @@ function activateMushafWheel() {
     return;
   }
 
-  const wheelRadius = 108;
-  const localCenterX = Math.max(
-    wheelRadius + 12,
-    cardBounds.width - wheelRadius - 14
-  );
+  const wheelSize = Number.parseFloat(window.getComputedStyle(elements.mushafWheelOverlay).getPropertyValue("--wheel-size")) || 236;
+  const wheelRadius = wheelSize / 2;
+  const localCenterX = cardBounds.width + WHEEL_ARC_OFFSCREEN_X;
   const minCenterY = wheelRadius + 12;
   const maxCenterY = Math.max(minCenterY, cardBounds.height - wheelRadius - 12);
   const localCenterY = Math.min(
@@ -761,12 +791,20 @@ function activateMushafWheel() {
   wheelState.centerY = cardBounds.top + localCenterY;
   wheelState.baseSurah = clampSurahNumber(modalState.surahNumber || 1);
   wheelState.selectedSurah = wheelState.baseSurah;
-  wheelState.lastAngle = getWheelAngleDegrees(wheelState.startX, wheelState.startY);
+  wheelState.activationAngle = clampWheelArcAngle(
+    getWheelAngleDegrees(wheelState.startX, wheelState.startY)
+  );
+  wheelState.lastAngle = wheelState.activationAngle;
   wheelState.accumulatedAngle = 0;
+  wheelState.lastTouchX = wheelState.startX;
+  wheelState.lastTouchY = wheelState.startY;
+  wheelState.lastMoveTs = performance.now();
+  wheelState.radius = wheelRadius;
   wheelState.active = true;
 
   elements.mushafWheelOverlay.style.setProperty("--wheel-center-x", `${localCenterX}px`);
   elements.mushafWheelOverlay.style.setProperty("--wheel-center-y", `${localCenterY}px`);
+  elements.mushafWheelOverlay.style.setProperty("--wheel-chip-radius", `${Math.max(96, wheelRadius - 12)}px`);
   setMushafWheelOverlayActive(true);
   renderMushafWheel();
 }
@@ -784,26 +822,44 @@ function startMushafWheelLongPress(touch) {
 
 function updateMushafWheelSelectionFromTouch(touch) {
   if (!wheelState.active || !touch) return;
-  const nextAngle = getWheelAngleDegrees(touch.clientX, touch.clientY);
-  if (!Number.isFinite(nextAngle)) return;
+  const nextAngleRaw = getWheelAngleDegrees(touch.clientX, touch.clientY);
+  if (!Number.isFinite(nextAngleRaw)) return;
+  const nextAngle = clampWheelArcAngle(nextAngleRaw);
 
-  if (!Number.isFinite(wheelState.lastAngle)) {
-    wheelState.lastAngle = nextAngle;
-    return;
+  const now = performance.now();
+  let speedBoost = 1;
+  if (
+    Number.isFinite(wheelState.lastTouchX) &&
+    Number.isFinite(wheelState.lastTouchY) &&
+    Number.isFinite(wheelState.lastMoveTs)
+  ) {
+    const distance = Math.hypot(
+      touch.clientX - wheelState.lastTouchX,
+      touch.clientY - wheelState.lastTouchY
+    );
+    const elapsed = Math.max(1, now - wheelState.lastMoveTs);
+    const velocity = distance / elapsed;
+    speedBoost += Math.min(3.5, velocity * WHEEL_SPEED_BOOST_SCALE);
   }
 
-  const delta = normalizeAngleDelta(nextAngle - wheelState.lastAngle);
+  wheelState.lastTouchX = touch.clientX;
+  wheelState.lastTouchY = touch.clientY;
+  wheelState.lastMoveTs = now;
   wheelState.lastAngle = nextAngle;
-  wheelState.accumulatedAngle += delta;
 
-  const rawStepCount = wheelState.accumulatedAngle / WHEEL_STEP_DEGREES;
-  const stepCount = rawStepCount > 0
-    ? Math.floor(rawStepCount)
-    : Math.ceil(rawStepCount);
-  if (!stepCount) return;
+  const radialDistance = getWheelDistanceFromCenter(touch.clientX, touch.clientY);
+  const depthBoost = 1 + Math.min(
+    4,
+    Math.max(0, radialDistance - wheelState.radius) / WHEEL_ACCELERATION_DISTANCE_PX
+  );
+  const totalBoost = Math.min(
+    WHEEL_MAX_ACCELERATION_BOOST,
+    depthBoost + speedBoost - 1
+  );
 
-  wheelState.accumulatedAngle -= stepCount * WHEEL_STEP_DEGREES;
-  const nextSurah = clampSurahNumber(wheelState.selectedSurah + stepCount);
+  const angleDelta = nextAngle - wheelState.activationAngle;
+  const surahDelta = Math.round((angleDelta / WHEEL_STEP_DEGREES) * totalBoost);
+  const nextSurah = clampSurahNumber(wheelState.baseSurah + surahDelta);
   if (nextSurah === wheelState.selectedSurah) return;
 
   wheelState.selectedSurah = nextSurah;
