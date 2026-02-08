@@ -24,8 +24,8 @@ const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
 const CHAPTER_MENU_LONG_PRESS_MS = 380;
 const CHAPTER_MENU_EDGE_ZONE_PX = 36;
 const CHAPTER_MENU_CANCEL_MOVE_PX = 12;
-const CHAPTER_MENU_VISIBLE_ROWS = 7;
-const CHAPTER_MENU_HALF_WINDOW = 3;
+const CHAPTER_MENU_VISIBLE_ROWS = 20;
+const CHAPTER_MENU_HALF_WINDOW = Math.floor(CHAPTER_MENU_VISIBLE_ROWS / 2);
 const CHAPTER_MENU_PX_PER_STEP = 22;
 const CHAPTER_MENU_TAP_MAX_MOVE_PX = 10;
 const CHAPTER_MENU_TAP_MAX_MS = 260;
@@ -1078,29 +1078,40 @@ function handleChapterMenuOverlayTouchMove(event) {
 function handleChapterMenuOverlayTouchEnd(event) {
   if (!chapterMenuState.active) return;
   const trackedTouch = getTrackedTouchFromEvent(event);
+  const changedTouch = event.changedTouches && event.changedTouches[0]
+    ? event.changedTouches[0]
+    : null;
+  const endTouch = trackedTouch || changedTouch;
   const now = performance.now();
   const tapCandidate = chapterMenuState.tapCandidate;
   const wasDragging = chapterMenuState.isDragging;
   const releaseVelocityY = chapterMenuState.velocityY;
-  const touchTarget = trackedTouch?.target || event.target;
+  const touchTarget = endTouch?.target || event.target;
   let handledTap = false;
 
-  if (tapCandidate && trackedTouch && !wasDragging) {
+  if (tapCandidate && !wasDragging) {
+    const endX = Number.isFinite(endTouch?.clientX) ? endTouch.clientX : tapCandidate.x;
+    const endY = Number.isFinite(endTouch?.clientY) ? endTouch.clientY : tapCandidate.y;
     const movedDistance = Math.hypot(
-      trackedTouch.clientX - tapCandidate.x,
-      trackedTouch.clientY - tapCandidate.y
+      endX - tapCandidate.x,
+      endY - tapCandidate.y
     );
     const isTap =
       movedDistance <= CHAPTER_MENU_TAP_MAX_MOVE_PX &&
       (now - tapCandidate.ts) <= CHAPTER_MENU_TAP_MAX_MS &&
       !tapCandidate.moved;
+    const targetSelectButton = touchTarget?.closest?.("[data-role='chapter-menu-select']");
+    const targetSelectSurah = Number(targetSelectButton?.dataset?.surah);
+    const tappedSurah = Number.isFinite(tapCandidate.selectSurah) && tapCandidate.selectSurah >= 1
+      ? tapCandidate.selectSurah
+      : (Number.isFinite(targetSelectSurah) && targetSelectSurah >= 1 ? targetSelectSurah : null);
 
-    if (isTap && Number.isFinite(tapCandidate.selectSurah) && tapCandidate.selectSurah >= 1) {
+    if (isTap && Number.isFinite(tappedSurah) && tappedSurah >= 1) {
       if (event.cancelable) {
         event.preventDefault();
       }
       handledTap = true;
-      const selectedSurah = wrapSurahNumber(tapCandidate.selectSurah);
+      const selectedSurah = wrapSurahNumber(tappedSurah);
       cancelChapterMenuInteraction();
       void commitChapterMenuSelection(selectedSurah);
     } else if (
