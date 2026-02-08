@@ -15,23 +15,18 @@ const BASMALAH_REGEX = new RegExp(
 );
 const DESKTOP_NAV_QUERY = window.matchMedia("(min-width: 701px)");
 const TWO_PAGE_SPREAD_QUERY = window.matchMedia("(min-width: 1100px)");
-const MOBILE_WHEEL_QUERY = window.matchMedia("(max-width: 700px) and (pointer: coarse)");
+const MOBILE_CHAPTER_MENU_QUERY = window.matchMedia("(max-width: 700px) and (pointer: coarse)");
 const MUSHAF_IMAGE_BASE = "assets/mushaf-pages";
 const MUSHAF_IMAGE_EXT = "webp";
 const MUSHAF_IMAGE_FALLBACK_EXT = "png";
 const ENABLE_TEXT_PAGE_FALLBACK = true;
 const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
-const WHEEL_LONG_PRESS_MS = 380;
-const WHEEL_EDGE_ZONE_PX = 36;
-const WHEEL_CANCEL_MOVE_PX = 12;
-const WHEEL_STEP_DEGREES = 4;
-const WHEEL_VISIBLE_NEIGHBORS = 2;
-const WHEEL_ARC_MIN_ANGLE = 106;
-const WHEEL_ARC_MAX_ANGLE = 254;
-const WHEEL_ACCELERATION_DISTANCE_PX = 22;
-const WHEEL_MAX_ACCELERATION_BOOST = 9;
-const WHEEL_SPEED_BOOST_SCALE = 1.35;
-const WHEEL_ARC_OFFSCREEN_X = 6;
+const CHAPTER_MENU_LONG_PRESS_MS = 380;
+const CHAPTER_MENU_EDGE_ZONE_PX = 36;
+const CHAPTER_MENU_CANCEL_MOVE_PX = 12;
+const CHAPTER_MENU_VISIBLE_ROWS = 7;
+const CHAPTER_MENU_HALF_WINDOW = 3;
+const CHAPTER_MENU_PX_PER_STEP = 22;
 const DEFAULT_MAIN_LANGUAGE_KEY = "en";
 const DEFAULT_MODAL_MODE = "browse";
 const ROUTE_PARAM_KEYS = [
@@ -234,9 +229,9 @@ const elements = {
   mushafZoom: document.getElementById("mushafZoom"),
   modalTranslation: document.getElementById("modalTranslation"),
   surahContainer: document.getElementById("surahContainer"),
-  mushafWheelOverlay: document.getElementById("mushafWheelOverlay"),
-  mushafWheelFocus: document.getElementById("mushafWheelFocus"),
-  mushafWheelNeighbors: document.getElementById("mushafWheelNeighbors"),
+  chapterMenuOverlay: document.getElementById("chapterMenuOverlay"),
+  chapterMenuPanel: document.getElementById("chapterMenuPanel"),
+  chapterMenuList: document.getElementById("chapterMenuList"),
 };
 
 let verseCache = new Map();
@@ -246,23 +241,15 @@ let pageSwipeStartX = null;
 let pageSwipeStartY = null;
 let mushafImageCache = new Map();
 let surahStartPageCache = new Map();
-let wheelState = {
+let chapterMenuState = {
   active: false,
   longPressTimer: null,
   trackingTouchId: null,
   startX: null,
   startY: null,
-  centerX: null,
-  centerY: null,
-  baseSurah: 1,
+  lastY: null,
+  accumulatedDeltaY: 0,
   selectedSurah: 1,
-  activationAngle: 180,
-  lastAngle: null,
-  accumulatedAngle: 0,
-  lastTouchX: null,
-  lastTouchY: null,
-  lastMoveTs: null,
-  radius: 0,
   isCommitting: false,
 };
 let lastInlineNavMode = DESKTOP_NAV_QUERY.matches;
@@ -620,99 +607,80 @@ function getTouchByIdentifier(touchList, touchId) {
 }
 
 function getTrackedTouchFromEvent(event) {
-  if (!event || wheelState.trackingTouchId === null) return null;
-  const activeTouch = getTouchByIdentifier(event.touches, wheelState.trackingTouchId);
+  if (!event || chapterMenuState.trackingTouchId === null) return null;
+  const activeTouch = getTouchByIdentifier(event.touches, chapterMenuState.trackingTouchId);
   if (activeTouch) return activeTouch;
-  return getTouchByIdentifier(event.changedTouches, wheelState.trackingTouchId);
+  return getTouchByIdentifier(event.changedTouches, chapterMenuState.trackingTouchId);
 }
 
-function isWheelLongPressPending() {
-  return !wheelState.active && wheelState.longPressTimer !== null;
+function isChapterMenuLongPressPending() {
+  return !chapterMenuState.active && chapterMenuState.longPressTimer !== null;
 }
 
-function clearWheelLongPressTimer() {
-  if (wheelState.longPressTimer !== null) {
-    clearTimeout(wheelState.longPressTimer);
-    wheelState.longPressTimer = null;
+function clearChapterMenuLongPressTimer() {
+  if (chapterMenuState.longPressTimer !== null) {
+    clearTimeout(chapterMenuState.longPressTimer);
+    chapterMenuState.longPressTimer = null;
   }
 }
 
-function setMushafWheelOverlayActive(active) {
-  if (!elements.mushafWheelOverlay) return;
-  elements.mushafWheelOverlay.classList.toggle("is-active", active);
-  elements.mushafWheelOverlay.setAttribute("aria-hidden", String(!active));
+function setChapterMenuOverlayActive(active) {
+  if (!elements.chapterMenuOverlay) return;
+  elements.chapterMenuOverlay.classList.toggle("is-active", active);
+  elements.chapterMenuOverlay.setAttribute("aria-hidden", String(!active));
   if (elements.modalCard) {
-    elements.modalCard.classList.toggle("is-wheel-active", active);
+    elements.modalCard.classList.toggle("is-chapter-menu-active", active);
   }
 }
 
-function resetMushafWheelTrackingState() {
-  wheelState.active = false;
-  wheelState.trackingTouchId = null;
-  wheelState.startX = null;
-  wheelState.startY = null;
-  wheelState.centerX = null;
-  wheelState.centerY = null;
-  wheelState.baseSurah = clampSurahNumber(modalState.surahNumber || 1);
-  wheelState.selectedSurah = wheelState.baseSurah;
-  wheelState.activationAngle = 180;
-  wheelState.lastAngle = null;
-  wheelState.accumulatedAngle = 0;
-  wheelState.lastTouchX = null;
-  wheelState.lastTouchY = null;
-  wheelState.lastMoveTs = null;
-  wheelState.radius = 0;
+function resetChapterMenuTouchTracking() {
+  chapterMenuState.trackingTouchId = null;
+  chapterMenuState.startX = null;
+  chapterMenuState.startY = null;
+  chapterMenuState.lastY = null;
+  chapterMenuState.accumulatedDeltaY = 0;
 }
 
-function cancelMushafWheelInteraction() {
-  clearWheelLongPressTimer();
-  setMushafWheelOverlayActive(false);
-  resetMushafWheelTrackingState();
+function resetChapterMenuState() {
+  chapterMenuState.active = false;
+  chapterMenuState.selectedSurah = clampSurahNumber(modalState.surahNumber || 1);
+  resetChapterMenuTouchTracking();
 }
 
-function canUseMushafWheel() {
+function cancelChapterMenuInteraction() {
+  clearChapterMenuLongPressTimer();
+  setChapterMenuOverlayActive(false);
+  if (elements.chapterMenuOverlay) {
+    elements.chapterMenuOverlay.style.removeProperty("--chapter-menu-top");
+    elements.chapterMenuOverlay.style.removeProperty("--chapter-menu-height");
+  }
+  resetChapterMenuState();
+}
+
+function canUseChapterMenu() {
   if (!elements.modal?.classList.contains("is-open")) return false;
   if (!isPageViewActive()) return false;
-  if (!MOBILE_WHEEL_QUERY.matches) return false;
-  if (!elements.mushafWheelOverlay || !elements.mushafWheelFocus || !elements.mushafWheelNeighbors) {
+  if (!MOBILE_CHAPTER_MENU_QUERY.matches) return false;
+  if (!elements.chapterMenuOverlay || !elements.chapterMenuPanel || !elements.chapterMenuList) {
     return false;
   }
   if (elements.navOverlay?.classList.contains("is-open")) return false;
   return true;
 }
 
-function isTouchInWheelEdgeZone(touch) {
+function isTouchInChapterMenuEdgeZone(touch) {
   if (!elements.surahContainer || !touch) return false;
   const bounds = elements.surahContainer.getBoundingClientRect();
   return (
-    touch.clientX >= (bounds.right - WHEEL_EDGE_ZONE_PX) &&
+    touch.clientX >= (bounds.right - CHAPTER_MENU_EDGE_ZONE_PX) &&
     touch.clientY >= bounds.top &&
     touch.clientY <= bounds.bottom
   );
 }
 
-function getWheelAngleDegrees(clientX, clientY) {
-  if (wheelState.centerX === null || wheelState.centerY === null) return null;
-  return Math.atan2(clientY - wheelState.centerY, clientX - wheelState.centerX) * (180 / Math.PI);
-}
-
-function normalizeAngle360(angle) {
-  if (!Number.isFinite(angle)) return 0;
-  let normalized = angle % 360;
-  if (normalized < 0) normalized += 360;
-  return normalized;
-}
-
-function clampWheelArcAngle(angle) {
-  const normalized = normalizeAngle360(angle);
-  if (normalized < WHEEL_ARC_MIN_ANGLE) return WHEEL_ARC_MIN_ANGLE;
-  if (normalized > WHEEL_ARC_MAX_ANGLE) return WHEEL_ARC_MAX_ANGLE;
-  return normalized;
-}
-
-function getWheelDistanceFromCenter(clientX, clientY) {
-  if (wheelState.centerX === null || wheelState.centerY === null) return 0;
-  return Math.hypot(clientX - wheelState.centerX, clientY - wheelState.centerY);
+function wrapSurahNumber(value) {
+  const normalized = Math.round(Number(value) || 1);
+  return ((normalized - 1 + TOTAL_SURAHS) % TOTAL_SURAHS) + 1;
 }
 
 function getSurahArabicNameFromFallback(surahNumber) {
@@ -732,135 +700,124 @@ function getSurahArabicLabel(surahNumber) {
   return `${safeSurah}. ${arabicName || `سورة ${safeSurah}`}`;
 }
 
-function renderMushafWheel() {
-  if (!elements.mushafWheelFocus || !elements.mushafWheelNeighbors) return;
-  const selectedSurah = clampSurahNumber(wheelState.selectedSurah || modalState.surahNumber || 1);
-  wheelState.selectedSurah = selectedSurah;
-  const progressPercent = Math.round((selectedSurah / TOTAL_SURAHS) * 100);
-
-  elements.mushafWheelFocus.innerHTML = `
-    <span class="mushaf-wheel-focus-label">Selected</span>
-    <span class="mushaf-wheel-focus-number">${String(selectedSurah).padStart(3, "0")} / ${TOTAL_SURAHS}</span>
-    <span class="mushaf-wheel-focus-name">${escapeHtml(getSurahArabicName(selectedSurah))}</span>
-    <span class="mushaf-wheel-focus-hint">${progressPercent}%</span>
-  `;
-
-  const neighbors = [];
-  const angleStep = 18;
-  const baseAngle = 270;
-  for (let offset = -WHEEL_VISIBLE_NEIGHBORS; offset <= WHEEL_VISIBLE_NEIGHBORS; offset += 1) {
-    if (offset === 0) continue;
-    const candidateSurah = selectedSurah + offset;
-    if (candidateSurah < 1 || candidateSurah > TOTAL_SURAHS) continue;
-    const chipAngle = Math.min(314, Math.max(226, baseAngle + (offset * angleStep)));
-    neighbors.push(`
-      <div
-        class="mushaf-wheel-chip"
-        style="--chip-angle:${chipAngle}deg;--chip-distance:${Math.abs(offset)};"
-      >
-        ${escapeHtml(getSurahArabicLabel(candidateSurah))}
-      </div>
-    `);
+function buildVisibleChapterRows(centerSurah) {
+  const safeCenter = wrapSurahNumber(centerSurah);
+  const rows = [];
+  for (let index = 0; index < CHAPTER_MENU_VISIBLE_ROWS; index += 1) {
+    const offset = index - CHAPTER_MENU_HALF_WINDOW;
+    rows.push({
+      surahNumber: wrapSurahNumber(safeCenter + offset),
+      isCenter: offset === 0,
+    });
   }
-
-  elements.mushafWheelNeighbors.innerHTML = neighbors.join("");
+  return rows;
 }
 
-function activateMushafWheel() {
-  if (!canUseMushafWheel() || wheelState.startX === null || wheelState.startY === null) {
-    cancelMushafWheelInteraction();
-    return;
-  }
-
-  const cardBounds = elements.modalCard?.getBoundingClientRect();
-  if (!cardBounds) {
-    cancelMushafWheelInteraction();
-    return;
-  }
-
-  const wheelRadius = Math.max(170, (cardBounds.height / 2) - 10);
-  const wheelSize = wheelRadius * 2;
-  const localCenterX = cardBounds.width + WHEEL_ARC_OFFSCREEN_X;
-  const localCenterY = cardBounds.height / 2;
-
-  wheelState.centerX = cardBounds.left + localCenterX;
-  wheelState.centerY = cardBounds.top + localCenterY;
-  wheelState.baseSurah = clampSurahNumber(modalState.surahNumber || 1);
-  wheelState.selectedSurah = wheelState.baseSurah;
-  wheelState.activationAngle = clampWheelArcAngle(
-    getWheelAngleDegrees(wheelState.startX, wheelState.startY)
+function renderChapterMenu(centerSurah) {
+  if (!elements.chapterMenuList) return;
+  const selectedSurah = wrapSurahNumber(
+    centerSurah || chapterMenuState.selectedSurah || modalState.surahNumber || 1
   );
-  wheelState.lastAngle = wheelState.activationAngle;
-  wheelState.accumulatedAngle = 0;
-  wheelState.lastTouchX = wheelState.startX;
-  wheelState.lastTouchY = wheelState.startY;
-  wheelState.lastMoveTs = performance.now();
-  wheelState.radius = wheelRadius;
-  wheelState.active = true;
+  chapterMenuState.selectedSurah = selectedSurah;
 
-  elements.mushafWheelOverlay.style.setProperty("--wheel-size", `${wheelSize}px`);
-  elements.mushafWheelOverlay.style.setProperty("--wheel-center-x", `${localCenterX}px`);
-  elements.mushafWheelOverlay.style.setProperty("--wheel-center-y", `${localCenterY}px`);
-  elements.mushafWheelOverlay.style.setProperty("--wheel-chip-radius", `${Math.max(120, wheelRadius - 20)}px`);
-  setMushafWheelOverlayActive(true);
-  renderMushafWheel();
+  const rows = buildVisibleChapterRows(selectedSurah);
+  elements.chapterMenuList.innerHTML = rows
+    .map((row) => {
+      const numberLabel = String(row.surahNumber).padStart(3, "0");
+      const chapterName = getSurahArabicName(row.surahNumber);
+      const chapterLabel = getSurahArabicLabel(row.surahNumber);
+      const escapedName = escapeHtml(chapterName);
+      const escapedLabel = escapeHtml(chapterLabel);
+      if (row.isCenter) {
+        return `
+          <div class="chapter-menu-row is-center">
+            <button
+              class="chapter-menu-select"
+              type="button"
+              data-role="chapter-menu-select"
+              data-surah="${row.surahNumber}"
+              aria-label="Go to ${escapedLabel}"
+            >
+              <span class="chapter-menu-row-number">${numberLabel}</span>
+              <span class="chapter-menu-row-name">${escapedName}</span>
+            </button>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="chapter-menu-row" aria-hidden="true">
+          <span class="chapter-menu-row-number">${numberLabel}</span>
+          <span class="chapter-menu-row-name">${escapedName}</span>
+        </div>
+      `;
+    })
+    .join("");
 }
 
-function startMushafWheelLongPress(touch) {
-  clearWheelLongPressTimer();
-  wheelState.trackingTouchId = touch.identifier;
-  wheelState.startX = touch.clientX;
-  wheelState.startY = touch.clientY;
-  wheelState.longPressTimer = setTimeout(() => {
-    clearWheelLongPressTimer();
-    activateMushafWheel();
-  }, WHEEL_LONG_PRESS_MS);
+function syncChapterMenuPanelBounds() {
+  if (!elements.chapterMenuOverlay || !elements.modalCard || !elements.surahContainer) return;
+
+  const cardBounds = elements.modalCard.getBoundingClientRect();
+  const containerBounds = elements.surahContainer.getBoundingClientRect();
+  const topOffset = Math.max(0, containerBounds.top - cardBounds.top);
+  const panelHeight = Math.max(
+    160,
+    Math.min(cardBounds.height - topOffset, containerBounds.height)
+  );
+
+  elements.chapterMenuOverlay.style.setProperty("--chapter-menu-top", `${Math.round(topOffset)}px`);
+  elements.chapterMenuOverlay.style.setProperty("--chapter-menu-height", `${Math.round(panelHeight)}px`);
 }
 
-function updateMushafWheelSelectionFromTouch(touch) {
-  if (!wheelState.active || !touch) return;
-  const nextAngleRaw = getWheelAngleDegrees(touch.clientX, touch.clientY);
-  if (!Number.isFinite(nextAngleRaw)) return;
-  const nextAngle = clampWheelArcAngle(nextAngleRaw);
-
-  const now = performance.now();
-  let speedBoost = 1;
+function activateChapterMenu() {
   if (
-    Number.isFinite(wheelState.lastTouchX) &&
-    Number.isFinite(wheelState.lastTouchY) &&
-    Number.isFinite(wheelState.lastMoveTs)
+    !canUseChapterMenu() ||
+    chapterMenuState.startX === null ||
+    chapterMenuState.startY === null
   ) {
-    const distance = Math.hypot(
-      touch.clientX - wheelState.lastTouchX,
-      touch.clientY - wheelState.lastTouchY
-    );
-    const elapsed = Math.max(1, now - wheelState.lastMoveTs);
-    const velocity = distance / elapsed;
-    speedBoost += Math.min(3.5, velocity * WHEEL_SPEED_BOOST_SCALE);
+    cancelChapterMenuInteraction();
+    return;
   }
 
-  wheelState.lastTouchX = touch.clientX;
-  wheelState.lastTouchY = touch.clientY;
-  wheelState.lastMoveTs = now;
-  wheelState.lastAngle = nextAngle;
+  chapterMenuState.active = true;
+  chapterMenuState.lastY = chapterMenuState.startY;
+  chapterMenuState.accumulatedDeltaY = 0;
+  chapterMenuState.selectedSurah = clampSurahNumber(modalState.surahNumber || 1);
+  syncChapterMenuPanelBounds();
+  setChapterMenuOverlayActive(true);
+  renderChapterMenu(chapterMenuState.selectedSurah);
+}
 
-  const radialDistance = getWheelDistanceFromCenter(touch.clientX, touch.clientY);
-  const depthBoost = 1 + Math.min(
-    4,
-    Math.max(0, radialDistance - wheelState.radius) / WHEEL_ACCELERATION_DISTANCE_PX
-  );
-  const totalBoost = Math.min(
-    WHEEL_MAX_ACCELERATION_BOOST,
-    depthBoost + speedBoost - 1
-  );
+function startChapterMenuLongPress(touch) {
+  clearChapterMenuLongPressTimer();
+  chapterMenuState.trackingTouchId = touch.identifier;
+  chapterMenuState.startX = touch.clientX;
+  chapterMenuState.startY = touch.clientY;
+  chapterMenuState.lastY = touch.clientY;
+  chapterMenuState.accumulatedDeltaY = 0;
+  chapterMenuState.longPressTimer = setTimeout(() => {
+    clearChapterMenuLongPressTimer();
+    activateChapterMenu();
+  }, CHAPTER_MENU_LONG_PRESS_MS);
+}
 
-  const angleDelta = nextAngle - wheelState.activationAngle;
-  const surahDelta = Math.round((angleDelta / WHEEL_STEP_DEGREES) * totalBoost);
-  const nextSurah = clampSurahNumber(wheelState.baseSurah + surahDelta);
-  if (nextSurah === wheelState.selectedSurah) return;
+function updateChapterMenuSelectionFromTouch(touch) {
+  if (!chapterMenuState.active || !touch) return;
+  if (!Number.isFinite(chapterMenuState.lastY)) {
+    chapterMenuState.lastY = touch.clientY;
+  }
 
-  wheelState.selectedSurah = nextSurah;
-  renderMushafWheel();
+  const deltaY = touch.clientY - chapterMenuState.lastY;
+  chapterMenuState.lastY = touch.clientY;
+  chapterMenuState.accumulatedDeltaY += deltaY;
+
+  const stepDelta = Math.trunc(chapterMenuState.accumulatedDeltaY / CHAPTER_MENU_PX_PER_STEP);
+  if (stepDelta === 0) return;
+
+  chapterMenuState.accumulatedDeltaY -= stepDelta * CHAPTER_MENU_PX_PER_STEP;
+  chapterMenuState.selectedSurah = wrapSurahNumber(chapterMenuState.selectedSurah - stepDelta);
+  renderChapterMenu(chapterMenuState.selectedSurah);
 }
 
 async function resolveSurahStartPage(surahNumber) {
@@ -874,10 +831,10 @@ async function resolveSurahStartPage(surahNumber) {
   return resolvedPage;
 }
 
-async function commitWheelSelection(surahNumber) {
+async function commitChapterMenuSelection(surahNumber) {
   const safeSurah = clampSurahNumber(surahNumber);
-  if (wheelState.isCommitting) return;
-  wheelState.isCommitting = true;
+  if (chapterMenuState.isCommitting) return;
+  chapterMenuState.isCommitting = true;
 
   const previousSurahNumber = modalState.surahNumber;
   const previousAyahNumber = modalState.ayahNumber;
@@ -898,13 +855,13 @@ async function commitWheelSelection(surahNumber) {
     syncModalControls();
     setStatus("Unable to jump to that chapter right now. Please retry.", "error");
   } finally {
-    wheelState.isCommitting = false;
+    chapterMenuState.isCommitting = false;
   }
 }
 
 function setNavOverlay(open) {
   if (!elements.navOverlay || !elements.navToggle) return;
-  cancelMushafWheelInteraction();
+  cancelChapterMenuInteraction();
 
   if (useInlineNav()) {
     elements.navToggle.hidden = true;
@@ -943,21 +900,82 @@ function handleNavOverlayClick(event) {
   }
 }
 
+function handleChapterMenuOverlayClick(event) {
+  if (!chapterMenuState.active || !elements.chapterMenuOverlay) return;
+
+  const selectButton = event.target.closest("[data-role='chapter-menu-select']");
+  if (selectButton) {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    const selectedSurah = wrapSurahNumber(
+      Number(selectButton.dataset.surah) || chapterMenuState.selectedSurah || modalState.surahNumber || 1
+    );
+    cancelChapterMenuInteraction();
+    void commitChapterMenuSelection(selectedSurah);
+    return;
+  }
+
+  if (event.target === elements.chapterMenuOverlay) {
+    cancelChapterMenuInteraction();
+  }
+}
+
+function handleChapterMenuOverlayTouchStart(event) {
+  if (!chapterMenuState.active || chapterMenuState.isCommitting) return;
+  const touch = event.touches ? event.touches[0] : null;
+  if (!touch) return;
+
+  chapterMenuState.trackingTouchId = touch.identifier;
+  chapterMenuState.startX = touch.clientX;
+  chapterMenuState.startY = touch.clientY;
+  chapterMenuState.lastY = touch.clientY;
+  chapterMenuState.accumulatedDeltaY = 0;
+
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+}
+
+function handleChapterMenuOverlayTouchMove(event) {
+  if (!chapterMenuState.active || chapterMenuState.isCommitting) return;
+  const trackedTouch = getTrackedTouchFromEvent(event);
+  if (!trackedTouch) return;
+
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  updateChapterMenuSelectionFromTouch(trackedTouch);
+}
+
+function handleChapterMenuOverlayTouchEnd(event) {
+  if (!chapterMenuState.active) return;
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+  resetChapterMenuTouchTracking();
+}
+
+function handleChapterMenuOverlayTouchCancel() {
+  if (!chapterMenuState.active && !isChapterMenuLongPressPending()) return;
+  cancelChapterMenuInteraction();
+}
+
 function handlePageSwipeStart(event) {
   if (!isPageViewActive()) return;
 
-  if (wheelState.active || wheelState.isCommitting) {
+  if (chapterMenuState.active || chapterMenuState.isCommitting) {
     return;
   }
 
   const touch = event.touches ? event.touches[0] : event;
-  if (canUseMushafWheel() && isTouchInWheelEdgeZone(touch)) {
+  if (canUseChapterMenu() && isTouchInChapterMenuEdgeZone(touch)) {
     if (event.cancelable) {
       event.preventDefault();
     }
     pageSwipeStartX = null;
     pageSwipeStartY = null;
-    startMushafWheelLongPress(touch);
+    startChapterMenuLongPress(touch);
     return;
   }
 
@@ -968,23 +986,28 @@ function handlePageSwipeStart(event) {
 function handlePageSwipeMove(event) {
   const trackedTouch = getTrackedTouchFromEvent(event);
 
-  if (wheelState.active) {
+  if (chapterMenuState.active) {
     if (!trackedTouch) return;
-    event.preventDefault();
-    updateMushafWheelSelectionFromTouch(trackedTouch);
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    updateChapterMenuSelectionFromTouch(trackedTouch);
     return;
   }
 
-  if (isWheelLongPressPending() && trackedTouch) {
-    const dx = trackedTouch.clientX - wheelState.startX;
-    const dy = trackedTouch.clientY - wheelState.startY;
-    if (Math.hypot(dx, dy) > WHEEL_CANCEL_MOVE_PX) {
-      const fallbackStartX = wheelState.startX;
-      const fallbackStartY = wheelState.startY;
-      cancelMushafWheelInteraction();
+  if (isChapterMenuLongPressPending() && trackedTouch) {
+    const dx = trackedTouch.clientX - chapterMenuState.startX;
+    const dy = trackedTouch.clientY - chapterMenuState.startY;
+    if (Math.hypot(dx, dy) > CHAPTER_MENU_CANCEL_MOVE_PX) {
+      const fallbackStartX = chapterMenuState.startX;
+      const fallbackStartY = chapterMenuState.startY;
+      cancelChapterMenuInteraction();
       pageSwipeStartX = fallbackStartX;
       pageSwipeStartY = fallbackStartY;
     } else {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
       return;
     }
   }
@@ -1000,20 +1023,18 @@ function handlePageSwipeMove(event) {
 }
 
 function handlePageSwipeEnd(event) {
-  if (wheelState.active) {
-    const selectedSurah = clampSurahNumber(wheelState.selectedSurah || modalState.surahNumber || 1);
-    cancelMushafWheelInteraction();
+  if (chapterMenuState.active) {
+    resetChapterMenuTouchTracking();
     pageSwipeStartX = null;
     pageSwipeStartY = null;
     if (event.cancelable) {
       event.preventDefault();
     }
-    void commitWheelSelection(selectedSurah);
     return;
   }
 
-  if (isWheelLongPressPending()) {
-    cancelMushafWheelInteraction();
+  if (isChapterMenuLongPressPending()) {
+    cancelChapterMenuInteraction();
     pageSwipeStartX = null;
     pageSwipeStartY = null;
     return;
@@ -1038,7 +1059,7 @@ function handlePageSwipeEnd(event) {
 }
 
 function handlePageSwipeCancel() {
-  cancelMushafWheelInteraction();
+  cancelChapterMenuInteraction();
   pageSwipeStartX = null;
   pageSwipeStartY = null;
 }
@@ -2101,7 +2122,7 @@ async function openPageView(pageNumber, options = {}) {
   } = options;
   const requestId = ++modalRenderRequestId;
   const targetPage = clampPageNumber(pageNumber);
-  cancelMushafWheelInteraction();
+  cancelChapterMenuInteraction();
 
   if (!modalState.arabicOnly || modalState.translationKeys.length) {
     modalState.arabicOnly = true;
@@ -2478,7 +2499,7 @@ function openModal() {
 function closeModal(options = {}) {
   const { historyMode = "push", suppressRouteSync = false } = options;
   modalRenderRequestId += 1;
-  cancelMushafWheelInteraction();
+  cancelChapterMenuInteraction();
   elements.modal.classList.remove("is-open");
   elements.modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
@@ -2718,6 +2739,13 @@ elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
 elements.navToggle.addEventListener("click", toggleNavOverlay);
 elements.navOverlay.addEventListener("click", handleNavOverlayClick);
+if (elements.chapterMenuOverlay) {
+  elements.chapterMenuOverlay.addEventListener("click", handleChapterMenuOverlayClick);
+  elements.chapterMenuOverlay.addEventListener("touchstart", handleChapterMenuOverlayTouchStart, { passive: false });
+  elements.chapterMenuOverlay.addEventListener("touchmove", handleChapterMenuOverlayTouchMove, { passive: false });
+  elements.chapterMenuOverlay.addEventListener("touchend", handleChapterMenuOverlayTouchEnd, { passive: false });
+  elements.chapterMenuOverlay.addEventListener("touchcancel", handleChapterMenuOverlayTouchCancel, { passive: true });
+}
 elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: false });
 elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { passive: false });
 elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: false });
@@ -2727,7 +2755,7 @@ window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
   const inlineNow = useInlineNav();
   const spreadNow = shouldUseTwoPageSpread();
-  const wheelStillAllowed = MOBILE_WHEEL_QUERY.matches;
+  const chapterMenuStillAllowed = MOBILE_CHAPTER_MENU_QUERY.matches;
   const layoutChanged =
     inlineNow !== lastInlineNavMode ||
     spreadNow !== lastTwoPageSpreadMode;
@@ -2735,18 +2763,22 @@ window.addEventListener("resize", () => {
   lastInlineNavMode = inlineNow;
   lastTwoPageSpreadMode = spreadNow;
 
-  if (!wheelStillAllowed) {
-    cancelMushafWheelInteraction();
+  if (!chapterMenuStillAllowed) {
+    cancelChapterMenuInteraction();
   }
 
   if (layoutChanged && isPageViewActive()) {
-    cancelMushafWheelInteraction();
+    cancelChapterMenuInteraction();
     syncNavigationLayout();
     openPageView(modalState.pageNumber, {
       highlightKey: `${modalState.surahNumber}:${modalState.ayahNumber}`,
       suppressRouteSync: true,
     });
     return;
+  }
+
+  if (chapterMenuState.active) {
+    syncChapterMenuPanelBounds();
   }
 
   syncNavigationLayout();
