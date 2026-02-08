@@ -899,6 +899,9 @@ function handlePageSwipeStart(event) {
 
   const touch = event.touches ? event.touches[0] : event;
   if (canUseMushafWheel() && isTouchInWheelEdgeZone(touch)) {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
     pageSwipeStartX = null;
     pageSwipeStartY = null;
     startMushafWheelLongPress(touch);
@@ -985,6 +988,13 @@ function handlePageSwipeCancel() {
   cancelMushafWheelInteraction();
   pageSwipeStartX = null;
   pageSwipeStartY = null;
+}
+
+function handleMushafContextMenu(event) {
+  if (!isPageViewActive()) return;
+  if (event.cancelable) {
+    event.preventDefault();
+  }
 }
 
 function setPageControlsEnabled(enabled) {
@@ -2655,10 +2665,11 @@ elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
 elements.navToggle.addEventListener("click", toggleNavOverlay);
 elements.navOverlay.addEventListener("click", handleNavOverlayClick);
-elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: true });
+elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: false });
 elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { passive: false });
 elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: false });
 elements.surahContainer.addEventListener("touchcancel", handlePageSwipeCancel, { passive: true });
+elements.surahContainer.addEventListener("contextmenu", handleMushafContextMenu);
 window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
   const inlineNow = useInlineNav();
