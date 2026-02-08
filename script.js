@@ -96,10 +96,13 @@ const elements = {
   surahSelect: document.getElementById("surahSelect"),
   ayahInput: document.getElementById("ayahInput"),
   pageInput: document.getElementById("pageInput"),
+  goBtn: document.getElementById("goBtn"),
   pagePrevBtn: document.getElementById("pagePrevBtn"),
   pageNextBtn: document.getElementById("pageNextBtn"),
+  pageMenuBtnBottom: document.getElementById("pageMenuBtnBottom"),
   pagePrevBtnBottom: document.getElementById("pagePrevBtnBottom"),
   pageNextBtnBottom: document.getElementById("pageNextBtnBottom"),
+  pageCloseBtnBottom: document.getElementById("pageCloseBtnBottom"),
   mushafZoom: document.getElementById("mushafZoom"),
   modalTranslation: document.getElementById("modalTranslation"),
   surahContainer: document.getElementById("surahContainer"),
@@ -143,19 +146,18 @@ function autoResize(element) {
 }
 
 function getSelectedLanguageKeys() {
-  const checked = Array.from(
-    elements.languageOptions.querySelectorAll("input[name='translation']:checked")
-  );
-
-  if (checked.length === 0) {
-    const fallback = elements.languageOptions.querySelector("input[value='en']");
-    if (fallback) {
-      fallback.checked = true;
-      return ["en"];
-    }
+  if (!elements.languageOptions) {
+    return [DEFAULT_MAIN_LANGUAGE_KEY];
   }
 
-  return checked.map((input) => input.value);
+  const selected = String(elements.languageOptions.value || DEFAULT_MAIN_LANGUAGE_KEY).trim();
+  const normalized = TRANSLATIONS[selected] ? selected : DEFAULT_MAIN_LANGUAGE_KEY;
+
+  if (elements.languageOptions.value !== normalized) {
+    elements.languageOptions.value = normalized;
+  }
+
+  return [normalized];
 }
 
 function getSelectedEditionIds() {
@@ -242,6 +244,15 @@ function getModalEditionIds() {
 
 function isPageViewActive() {
   return modalState.arabicOnly === true;
+}
+
+function isMushafCanvasVisible() {
+  if (!elements.surahContainer) return false;
+  return Boolean(elements.surahContainer.querySelector(".mushaf-page-canvas"));
+}
+
+function isMushafInteractionActive() {
+  return isPageViewActive() || isMushafCanvasVisible();
 }
 
 function clampPageNumber(value) {
@@ -654,7 +665,12 @@ function setLoading(isLoading) {
 }
 
 function normalizeMainLanguageKeys(keysInput) {
-  const keys = Array.isArray(keysInput) ? keysInput : [];
+  const keys = Array.isArray(keysInput)
+    ? keysInput
+    : String(keysInput || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   const normalized = keys
     .map((key) => String(key || "").trim())
     .filter((key) => TRANSLATIONS[key]);
@@ -663,15 +679,14 @@ function normalizeMainLanguageKeys(keysInput) {
     return [DEFAULT_MAIN_LANGUAGE_KEY];
   }
 
-  return [...new Set(normalized)];
+  return [normalized[0]];
 }
 
 function setMainLanguageKeys(keysInput) {
   const normalized = normalizeMainLanguageKeys(keysInput);
-  const inputs = elements.languageOptions.querySelectorAll("input[name='translation']");
-  inputs.forEach((input) => {
-    input.checked = normalized.includes(input.value);
-  });
+  if (elements.languageOptions) {
+    elements.languageOptions.value = normalized[0] || DEFAULT_MAIN_LANGUAGE_KEY;
+  }
   return normalized;
 }
 
@@ -800,7 +815,7 @@ function buildSearchParamsFromRouteState(routeStateInput) {
   }
 
   if (!(routeState.lang.length === 1 && routeState.lang[0] === DEFAULT_MAIN_LANGUAGE_KEY)) {
-    params.set("lang", routeState.lang.join(","));
+    params.set("lang", routeState.lang[0]);
   }
 
   if (routeState.q && routeState.page > 1) {
@@ -1502,22 +1517,55 @@ function parsePageData(pagePayload, highlightKey) {
 
 async function fetchAyahPageNumber(surahNumber, ayahNumber) {
   const reference = `${surahNumber}:${ayahNumber}`;
-  const response = await fetch(
-    `https://api.alquran.cloud/v1/ayah/${reference}/${ARABIC_EDITION}`
-  );
+  const editions = [ARABIC_MEDINA_EDITION, ARABIC_EDITION];
 
-  if (!response.ok) {
-    throw new Error("Ayah lookup failed");
+  for (const edition of editions) {
+    try {
+      const response = await fetch(
+        `https://api.alquran.cloud/v1/ayah/${reference}/${edition}`
+      );
+      if (!response.ok) continue;
+      const data = await response.json();
+      const ayahData = data.data || {};
+      const page =
+        ayahData.page ||
+        ayahData.pageNumber ||
+        ayahData.page_number ||
+        null;
+      if (page) {
+        return clampPageNumber(page);
+      }
+    } catch (error) {
+      // try next edition
+    }
   }
 
-  const data = await response.json();
-  const ayahData = data.data || {};
-  return (
-    ayahData.page ||
-    ayahData.pageNumber ||
-    ayahData.page_number ||
-    null
-  );
+  // Final fallback: fetch full surah and derive page from ayah metadata.
+  for (const edition of editions) {
+    try {
+      const response = await fetch(
+        `https://api.alquran.cloud/v1/surah/${surahNumber}/${edition}`
+      );
+      if (!response.ok) continue;
+      const data = await response.json();
+      const ayahs = Array.isArray(data?.data?.ayahs) ? data.data.ayahs : [];
+      const targetAyah = ayahs.find(
+        (ayah) => Number(ayah?.numberInSurah) === Number(ayahNumber)
+      );
+      const page =
+        targetAyah?.page ||
+        targetAyah?.pageNumber ||
+        targetAyah?.page_number ||
+        null;
+      if (page) {
+        return clampPageNumber(page);
+      }
+    } catch (error) {
+      // try next edition
+    }
+  }
+
+  throw new Error("Ayah lookup failed");
 }
 
 async function openPageView(pageNumber, options = {}) {
@@ -1528,6 +1576,13 @@ async function openPageView(pageNumber, options = {}) {
   } = options;
   const requestId = ++modalRenderRequestId;
   const targetPage = clampPageNumber(pageNumber);
+  if (!modalState.arabicOnly || modalState.translationKeys.length) {
+    modalState.arabicOnly = true;
+    modalState.translationKeys = [];
+    if (elements.modalTranslation) {
+      elements.modalTranslation.value = "arabic";
+    }
+  }
   modalState.pageNumber = targetPage;
 
   updateMedinaStyles();
@@ -1967,25 +2022,34 @@ function handleArabicQuickAccess() {
   });
 }
 
-function handleModalNavSubmit(event) {
+async function handleModalNavSubmit(event) {
   event.preventDefault();
   const surahNumber = Number(elements.surahSelect.value) || 1;
   const ayahNumber = Number(elements.ayahInput.value) || 1;
+  modalState.surahNumber = Math.min(Math.max(1, surahNumber), TOTAL_SURAHS);
+  modalState.ayahNumber = Math.max(1, ayahNumber);
+  syncModalControls();
   setNavOverlay(false);
-  if (isPageViewActive()) {
+  if (isMushafInteractionActive()) {
+    if (!modalState.arabicOnly) {
+      setModalTranslationSelection({ arabicOnly: true, keys: [] });
+    }
     const highlightKey = `${surahNumber}:${ayahNumber}`;
-    fetchAyahPageNumber(surahNumber, ayahNumber)
-      .then((pageNumber) => {
-        const targetPage = pageNumber || modalState.pageNumber || 1;
-        openPageView(targetPage, { highlightKey, historyMode: "replace" });
-      })
-      .catch(() => {
-        openPageView(modalState.pageNumber || 1, { highlightKey, historyMode: "replace" });
-      });
+    let targetPage = modalState.pageNumber || 1;
+    try {
+      const resolvedPage = await fetchAyahPageNumber(surahNumber, ayahNumber);
+      if (resolvedPage) {
+        targetPage = resolvedPage;
+      }
+    } catch (error) {
+      // Keep current page fallback while still attempting highlight sync.
+    }
+
+    await openPageView(targetPage, { highlightKey, historyMode: "replace" });
     return;
   }
 
-  openSurahModal(surahNumber, ayahNumber, getSurahNameFromMeta(surahNumber), {
+  await openSurahModal(surahNumber, ayahNumber, getSurahNameFromMeta(surahNumber), {
     mode: "browse",
     historyMode: "replace",
   });
@@ -2028,7 +2092,7 @@ function handleMushafZoomChange() {
 }
 
 function changeMushafPage(delta) {
-  if (!isPageViewActive()) return;
+  if (!isMushafInteractionActive()) return;
   const step = shouldUseTwoPageSpread() ? 2 : 1;
   const nextPage = clampPageNumber(modalState.pageNumber + (delta * step));
   if (nextPage === modalState.pageNumber) return;
@@ -2036,7 +2100,7 @@ function changeMushafPage(delta) {
 }
 
 function handlePageInputChange() {
-  if (!isPageViewActive()) return;
+  if (!isMushafInteractionActive()) return;
   const pageValue = clampPageNumber(elements.pageInput.value);
   openPageView(pageValue);
 }
@@ -2110,13 +2174,18 @@ elements.languageOptions.addEventListener("change", handleLanguageChange);
 elements.resultsList.addEventListener("click", handleResultsClick);
 elements.modal.addEventListener("click", handleModalClick);
 elements.modalNav.addEventListener("submit", handleModalNavSubmit);
+if (elements.goBtn) {
+  elements.goBtn.addEventListener("click", handleModalNavSubmit);
+}
 elements.surahSelect.addEventListener("change", handleSurahSelectChange);
 elements.modalTranslation.addEventListener("change", handleModalTranslationChange);
 elements.mushafZoom.addEventListener("change", handleMushafZoomChange);
 elements.pagePrevBtn.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtn.addEventListener("click", () => changeMushafPage(1));
+elements.pageMenuBtnBottom.addEventListener("click", toggleNavOverlay);
 elements.pagePrevBtnBottom.addEventListener("click", () => changeMushafPage(-1));
 elements.pageNextBtnBottom.addEventListener("click", () => changeMushafPage(1));
+elements.pageCloseBtnBottom.addEventListener("click", () => closeModal({ historyMode: "push" }));
 elements.pageInput.addEventListener("change", handlePageInputChange);
 elements.pageInput.addEventListener("keydown", handlePageInputKeydown);
 elements.navToggle.addEventListener("click", toggleNavOverlay);
@@ -2168,14 +2237,14 @@ renderEmptyState("Search for a topic to see results.");
 
 function applyLanguageFromParams(langParam) {
   if (!langParam) return;
-  const keys = langParam
+  const key = langParam
     .split(",")
     .map((item) => item.trim())
-    .filter((item) => TRANSLATIONS[item]);
+    .find((item) => TRANSLATIONS[item]);
 
-  if (!keys.length) return;
+  if (!key) return;
 
-  setMainLanguageKeys(keys);
+  setMainLanguageKeys([key]);
 }
 
 async function applyRouteState(routeStateInput, options = {}) {
