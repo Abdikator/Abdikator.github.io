@@ -25,9 +25,9 @@ const WHEEL_LONG_PRESS_MS = 380;
 const WHEEL_EDGE_ZONE_PX = 36;
 const WHEEL_CANCEL_MOVE_PX = 12;
 const WHEEL_STEP_DEGREES = 4;
-const WHEEL_VISIBLE_NEIGHBORS = 3;
-const WHEEL_ARC_MIN_ANGLE = 124;
-const WHEEL_ARC_MAX_ANGLE = 236;
+const WHEEL_VISIBLE_NEIGHBORS = 2;
+const WHEEL_ARC_MIN_ANGLE = 106;
+const WHEEL_ARC_MAX_ANGLE = 254;
 const WHEEL_ACCELERATION_DISTANCE_PX = 22;
 const WHEEL_MAX_ACCELERATION_BOOST = 9;
 const WHEEL_SPEED_BOOST_SCALE = 1.35;
@@ -739,13 +739,14 @@ function renderMushafWheel() {
   const progressPercent = Math.round((selectedSurah / TOTAL_SURAHS) * 100);
 
   elements.mushafWheelFocus.innerHTML = `
+    <span class="mushaf-wheel-focus-label">Selected</span>
     <span class="mushaf-wheel-focus-number">${String(selectedSurah).padStart(3, "0")} / ${TOTAL_SURAHS}</span>
     <span class="mushaf-wheel-focus-name">${escapeHtml(getSurahArabicName(selectedSurah))}</span>
     <span class="mushaf-wheel-focus-hint">${progressPercent}%</span>
   `;
 
   const neighbors = [];
-  const angleStep = 13;
+  const angleStep = 18;
   const baseAngle = 270;
   for (let offset = -WHEEL_VISIBLE_NEIGHBORS; offset <= WHEEL_VISIBLE_NEIGHBORS; offset += 1) {
     if (offset === 0) continue;
@@ -777,15 +778,10 @@ function activateMushafWheel() {
     return;
   }
 
-  const wheelSize = Number.parseFloat(window.getComputedStyle(elements.mushafWheelOverlay).getPropertyValue("--wheel-size")) || 236;
-  const wheelRadius = wheelSize / 2;
+  const wheelRadius = Math.max(170, (cardBounds.height / 2) - 10);
+  const wheelSize = wheelRadius * 2;
   const localCenterX = cardBounds.width + WHEEL_ARC_OFFSCREEN_X;
-  const minCenterY = wheelRadius + 12;
-  const maxCenterY = Math.max(minCenterY, cardBounds.height - wheelRadius - 12);
-  const localCenterY = Math.min(
-    Math.max(wheelState.startY - cardBounds.top, minCenterY),
-    maxCenterY
-  );
+  const localCenterY = cardBounds.height / 2;
 
   wheelState.centerX = cardBounds.left + localCenterX;
   wheelState.centerY = cardBounds.top + localCenterY;
@@ -802,9 +798,10 @@ function activateMushafWheel() {
   wheelState.radius = wheelRadius;
   wheelState.active = true;
 
+  elements.mushafWheelOverlay.style.setProperty("--wheel-size", `${wheelSize}px`);
   elements.mushafWheelOverlay.style.setProperty("--wheel-center-x", `${localCenterX}px`);
   elements.mushafWheelOverlay.style.setProperty("--wheel-center-y", `${localCenterY}px`);
-  elements.mushafWheelOverlay.style.setProperty("--wheel-chip-radius", `${Math.max(96, wheelRadius - 12)}px`);
+  elements.mushafWheelOverlay.style.setProperty("--wheel-chip-radius", `${Math.max(120, wheelRadius - 20)}px`);
   setMushafWheelOverlayActive(true);
   renderMushafWheel();
 }

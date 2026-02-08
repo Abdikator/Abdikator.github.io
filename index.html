@@ -699,8 +699,8 @@
       transition: opacity 0.16s ease;
       z-index: 2;
       overflow: hidden;
-      --wheel-size: 236px;
-      --wheel-chip-radius: 110px;
+      --wheel-size: 620px;
+      --wheel-chip-radius: 260px;
     }
 
     .mushaf-wheel-overlay.is-active {
@@ -756,21 +756,30 @@
 
     .mushaf-wheel-focus {
       position: absolute;
-      left: 24%;
+      left: 17%;
       top: 50%;
       transform: translate(-50%, -50%);
-      min-width: 112px;
-      max-width: 150px;
-      border-radius: 16px;
-      background: rgba(8, 19, 16, 0.9);
-      border: 1px solid rgba(223, 196, 140, 0.54);
-      box-shadow: inset 0 0 0 1px rgba(255, 240, 206, 0.18);
+      min-width: 132px;
+      max-width: 170px;
+      border-radius: 18px;
+      background: linear-gradient(160deg, rgba(17, 39, 31, 0.96), rgba(8, 19, 16, 0.98));
+      border: 2px solid rgba(241, 216, 159, 0.84);
+      box-shadow:
+        0 14px 26px rgba(0, 0, 0, 0.36),
+        inset 0 0 0 1px rgba(255, 240, 206, 0.28);
       display: grid;
       place-content: center start;
-      gap: 3px;
+      gap: 4px;
       text-align: center;
-      padding: 8px 10px;
+      padding: 10px 11px;
       color: #fceac5;
+    }
+
+    .mushaf-wheel-focus-label {
+      font-size: 0.54rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(249, 229, 186, 0.84);
     }
 
     .mushaf-wheel-focus-number {
@@ -808,20 +817,20 @@
         rotate(var(--chip-angle, 0deg))
         translateY(calc(var(--wheel-chip-radius, 110px) * -1))
         rotate(calc(var(--chip-angle, 0deg) * -1));
-      min-width: 82px;
-      max-width: 144px;
+      min-width: 96px;
+      max-width: 136px;
       border-radius: 999px;
       border: 1px solid rgba(215, 189, 139, 0.46);
       background: rgba(8, 20, 16, 0.86);
       color: #fce6b8;
-      padding: 4px 8px;
-      font-size: 0.62rem;
+      padding: 6px 9px;
+      font-size: 0.58rem;
       line-height: 1.22;
       text-align: center;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      opacity: calc(1 - (var(--chip-distance, 1) * 0.15));
+      opacity: calc(1 - (var(--chip-distance, 1) * 0.2));
       box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
     }
 
@@ -1687,12 +1696,12 @@
 
     @media (max-width: 700px) and (pointer: coarse) {
       .mushaf-wheel-overlay {
-        --wheel-size: 220px;
-        --wheel-chip-radius: 102px;
+        --wheel-size: 560px;
+        --wheel-chip-radius: 240px;
       }
 
       .mushaf-wheel-chip {
-        max-width: 138px;
+        max-width: 128px;
       }
     }
 
@@ -1721,20 +1730,21 @@
       }
 
       .mushaf-wheel-overlay {
-        --wheel-size: 200px;
-        --wheel-chip-radius: 92px;
+        --wheel-size: 520px;
+        --wheel-chip-radius: 220px;
       }
 
       .mushaf-wheel-chip {
-        min-width: 78px;
-        max-width: 124px;
-        font-size: 0.58rem;
+        min-width: 88px;
+        max-width: 118px;
+        font-size: 0.55rem;
       }
 
       .mushaf-wheel-focus {
-        min-width: 98px;
-        max-width: 136px;
-        padding: 7px 8px;
+        left: 16%;
+        min-width: 118px;
+        max-width: 148px;
+        padding: 8px 9px;
       }
 
       .mushaf-wheel-focus-name {
