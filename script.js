@@ -14,11 +14,29 @@ const BASMALAH_REGEX = new RegExp(
     "[ٱإأآا]ل[\\u064B-\\u0652\\u0670\\u0640]*ر[\\u064B-\\u0652\\u0670\\u0640]*ح[\\u064B-\\u0652\\u0670\\u0640]*ي[\\u064B-\\u0652\\u0670\\u0640]*م[\\u064B-\\u0652\\u0670\\u0640]*\\s*"
 );
 const DESKTOP_NAV_QUERY = window.matchMedia("(min-width: 701px)");
+const TWO_PAGE_SPREAD_QUERY = window.matchMedia("(min-width: 1100px)");
 const MUSHAF_IMAGE_BASE = "assets/mushaf-pages";
 const MUSHAF_IMAGE_EXT = "webp";
 const MUSHAF_IMAGE_FALLBACK_EXT = "png";
 const ENABLE_TEXT_PAGE_FALLBACK = true;
 const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
+const DEFAULT_MAIN_LANGUAGE_KEY = "en";
+const DEFAULT_MODAL_MODE = "browse";
+const ROUTE_PARAM_KEYS = [
+  "q",
+  "lang",
+  "page",
+  "view",
+  "surah",
+  "ayah",
+  "mushafPage",
+  "zoom",
+  "modalLang",
+  "modalMode",
+];
+const ROUTE_BACKUP_KEY = "quranExplorer.appState.v1";
+const ROUTE_BACKUP_VERSION = 1;
+const ROUTE_BACKUP_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const TRANSLATIONS = {
   en: { label: "English", edition: "en.sahih" },
@@ -60,6 +78,7 @@ const elements = {
   searchBtn: document.getElementById("searchBtn"),
   searchForm: document.getElementById("searchForm"),
   browseBtn: document.getElementById("browseBtn"),
+  arabicQuickBtn: document.getElementById("arabicQuickBtn"),
   status: document.getElementById("status"),
   resultsCount: document.getElementById("resultsCount"),
   resultsList: document.getElementById("fetched-verses"),
@@ -92,6 +111,11 @@ let surahMeta = new Map();
 let pageSwipeStartX = null;
 let pageSwipeStartY = null;
 let mushafImageCache = new Map();
+let lastInlineNavMode = DESKTOP_NAV_QUERY.matches;
+let lastTwoPageSpreadMode = TWO_PAGE_SPREAD_QUERY.matches;
+let isApplyingRouteState = false;
+let routeApplyRequestId = 0;
+let modalRenderRequestId = 0;
 
 function normalizeArabic(text) {
   return String(text || "")
@@ -265,6 +289,31 @@ function getMushafImageCandidates(pageNumber) {
   return [...new Set(candidates)];
 }
 
+function getExpectedMushafPathLabel(pageNumber) {
+  return getMushafImageCandidates(pageNumber).join(", ");
+}
+
+function getDesktopSpreadPages(pageNumber) {
+  const currentPage = clampPageNumber(pageNumber);
+  if (!shouldUseTwoPageSpread()) {
+    return { leftPage: currentPage, rightPage: null };
+  }
+
+  // Mushaf spread order (RTL book):
+  // odd page on the right, following even page on the left.
+  if (currentPage % 2 === 1) {
+    return {
+      leftPage: Math.min(currentPage + 1, TOTAL_PAGES),
+      rightPage: currentPage,
+    };
+  }
+
+  return {
+    leftPage: currentPage,
+    rightPage: Math.max(currentPage - 1, 1),
+  };
+}
+
 function preloadMushafImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -299,40 +348,56 @@ async function resolveMushafImageUrl(pageNumber) {
 
 function buildMushafImageMarkup(options = {}) {
   const {
-    pageNumber = 1,
-    imageUrl = "",
-    state = "ready",
-    errorMessage = "",
+    pages = [],
     zoomPercent = MUSHAF_ZOOM_LEVELS[0],
   } = options;
-
-  const safePageNumber = clampPageNumber(pageNumber);
   const zoom = clampMushafZoom(zoomPercent) / 100;
+  const safePages = Array.isArray(pages) && pages.length
+    ? pages
+    : [{ pageNumber: modalState.pageNumber || 1, state: "loading" }];
 
-  const stageMarkup =
-    state === "loading"
-      ? `
-          <div class="mushaf-image-skeleton" aria-hidden="true">
-            <div class="loading-line"></div>
-            <div class="loading-line short"></div>
-            <div class="loading-line"></div>
-            <div class="loading-line short"></div>
-          </div>
-        `
-      : state === "error"
-        ? `<div class="mushaf-image-error">${escapeHtml(errorMessage || "Page image unavailable.")}</div>`
-        : `<img
-            class="mushaf-page-image"
-            src="${escapeHtml(imageUrl)}"
-            alt="Quran Mushaf page ${safePageNumber}"
-            loading="eager"
-            decoding="async"
-          >`;
+  const tiles = safePages
+    .map((page) => {
+      const safePageNumber = clampPageNumber(page.pageNumber);
+      const state = page.state || "ready";
+      const errorMessage = page.errorMessage || "Page image unavailable.";
+      const tileClass = page.isCurrent ? "is-current" : "";
+      const stageMarkup =
+        state === "loading"
+          ? `
+              <div class="mushaf-image-skeleton" aria-hidden="true">
+                <div class="loading-line"></div>
+                <div class="loading-line short"></div>
+                <div class="loading-line"></div>
+                <div class="loading-line short"></div>
+              </div>
+            `
+          : state === "error"
+            ? `<div class="mushaf-image-error">${escapeHtml(errorMessage)}</div>`
+            : `<img
+                class="mushaf-page-image"
+                src="${escapeHtml(page.imageUrl || "")}"
+                alt="Quran Mushaf page ${safePageNumber}"
+                loading="eager"
+                decoding="async"
+              >`;
+
+      return `
+        <div class="mushaf-page-tile ${tileClass}" data-page="${safePageNumber}">
+          ${stageMarkup}
+        </div>
+      `;
+    })
+    .join("");
+
+  const spreadClass = safePages.length > 1 ? "is-spread" : "is-single";
 
   return `
     <div class="mushaf-page-canvas" style="--mushaf-zoom: ${zoom};">
       <div class="mushaf-image-stage">
-        ${stageMarkup}
+        <div class="mushaf-spread ${spreadClass}">
+          ${tiles}
+        </div>
       </div>
     </div>
   `;
@@ -371,6 +436,10 @@ function updateMedinaStyles() {
 
 function useInlineNav() {
   return DESKTOP_NAV_QUERY.matches;
+}
+
+function shouldUseTwoPageSpread() {
+  return useInlineNav() && TWO_PAGE_SPREAD_QUERY.matches;
 }
 
 function setNavOverlay(open) {
@@ -584,26 +653,255 @@ function setLoading(isLoading) {
   elements.searchBtn.textContent = isLoading ? "Searching..." : "Search";
 }
 
-function updateUrlState() {
-  if (!window?.history?.replaceState) return;
+function normalizeMainLanguageKeys(keysInput) {
+  const keys = Array.isArray(keysInput) ? keysInput : [];
+  const normalized = keys
+    .map((key) => String(key || "").trim())
+    .filter((key) => TRANSLATIONS[key]);
 
+  if (!normalized.length) {
+    return [DEFAULT_MAIN_LANGUAGE_KEY];
+  }
+
+  return [...new Set(normalized)];
+}
+
+function setMainLanguageKeys(keysInput) {
+  const normalized = normalizeMainLanguageKeys(keysInput);
+  const inputs = elements.languageOptions.querySelectorAll("input[name='translation']");
+  inputs.forEach((input) => {
+    input.checked = normalized.includes(input.value);
+  });
+  return normalized;
+}
+
+function hasAnyRouteParams(searchParams) {
+  const params = searchParams instanceof URLSearchParams
+    ? searchParams
+    : new URLSearchParams();
+  return ROUTE_PARAM_KEYS.some((key) => params.has(key));
+}
+
+function normalizeRouteState(routeState = {}) {
+  const normalized = {
+    q: "",
+    lang: [DEFAULT_MAIN_LANGUAGE_KEY],
+    page: 1,
+    view: "",
+    surah: 1,
+    ayah: 1,
+    mushafPage: 1,
+    zoom: MUSHAF_ZOOM_LEVELS[0],
+    modalLang: "",
+    modalMode: DEFAULT_MODAL_MODE,
+  };
+
+  normalized.q = String(routeState.q || "").trim();
+  normalized.lang = normalizeMainLanguageKeys(routeState.lang);
+
+  const parsedPage = Number.parseInt(routeState.page, 10);
+  if (Number.isFinite(parsedPage) && parsedPage > 0) {
+    normalized.page = parsedPage;
+  }
+
+  const viewValue = String(routeState.view || "").toLowerCase();
+  if (viewValue === "mushaf" || viewValue === "surah") {
+    normalized.view = viewValue;
+  }
+
+  normalized.surah = Math.min(
+    Math.max(1, Number.parseInt(routeState.surah, 10) || 1),
+    TOTAL_SURAHS
+  );
+  normalized.ayah = Math.max(1, Number.parseInt(routeState.ayah, 10) || 1);
+  normalized.mushafPage = clampPageNumber(routeState.mushafPage);
+  normalized.zoom = clampMushafZoom(routeState.zoom);
+
+  const modalModeValue = String(routeState.modalMode || "").toLowerCase();
+  normalized.modalMode = modalModeValue === "search" ? "search" : DEFAULT_MODAL_MODE;
+
+  const modalLangValue = String(routeState.modalLang || "").toLowerCase();
+  if (modalLangValue === "arabic" || TRANSLATIONS[modalLangValue]) {
+    normalized.modalLang = modalLangValue;
+  }
+
+  if (!normalized.q) {
+    normalized.page = 1;
+  }
+
+  if (normalized.view === "mushaf") {
+    normalized.modalLang = "arabic";
+  } else if (normalized.view === "surah") {
+    if (!normalized.modalLang || normalized.modalLang === "arabic") {
+      normalized.modalLang = normalized.lang[0] || DEFAULT_MAIN_LANGUAGE_KEY;
+    }
+  } else {
+    normalized.modalLang = "";
+    normalized.modalMode = DEFAULT_MODAL_MODE;
+  }
+
+  return normalized;
+}
+
+function captureAppRouteState() {
+  const modalOpen = Boolean(elements.modal?.classList.contains("is-open"));
+  const view = modalOpen
+    ? (isPageViewActive() ? "mushaf" : "surah")
+    : "";
+  const mainLangKeys = normalizeMainLanguageKeys(getSelectedLanguageKeys());
+  const modalLang = view === "mushaf"
+    ? "arabic"
+    : (modalState.arabicOnly ? "arabic" : (modalState.translationKeys[0] || mainLangKeys[0] || DEFAULT_MAIN_LANGUAGE_KEY));
+
+  return normalizeRouteState({
+    q: state.currentQuery,
+    lang: mainLangKeys,
+    page: state.currentPage + 1,
+    view,
+    surah: modalState.surahNumber,
+    ayah: modalState.ayahNumber,
+    mushafPage: modalState.pageNumber,
+    zoom: modalState.mushafZoom,
+    modalLang: view ? modalLang : "",
+    modalMode: modalState.mode,
+  });
+}
+
+function parseRouteStateFromUrl(searchParams) {
+  const params = searchParams instanceof URLSearchParams
+    ? searchParams
+    : new URLSearchParams();
+  const languageKeys = params
+    .get("lang")
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return normalizeRouteState({
+    q: params.get("q") || "",
+    lang: languageKeys,
+    page: Number.parseInt(params.get("page"), 10),
+    view: params.get("view") || "",
+    surah: Number.parseInt(params.get("surah"), 10),
+    ayah: Number.parseInt(params.get("ayah"), 10),
+    mushafPage: Number.parseInt(params.get("mushafPage"), 10),
+    zoom: Number.parseInt(params.get("zoom"), 10),
+    modalLang: params.get("modalLang") || "",
+    modalMode: params.get("modalMode") || DEFAULT_MODAL_MODE,
+  });
+}
+
+function buildSearchParamsFromRouteState(routeStateInput) {
+  const routeState = normalizeRouteState(routeStateInput);
   const params = new URLSearchParams();
-  if (state.currentQuery) {
-    params.set("q", state.currentQuery);
+
+  if (routeState.q) {
+    params.set("q", routeState.q);
   }
 
-  const languageKeys = getSelectedLanguageKeys();
-  if (!(languageKeys.length === 1 && languageKeys[0] === "en")) {
-    params.set("lang", languageKeys.join(","));
+  if (!(routeState.lang.length === 1 && routeState.lang[0] === DEFAULT_MAIN_LANGUAGE_KEY)) {
+    params.set("lang", routeState.lang.join(","));
   }
 
-  if (state.currentPage > 0) {
-    params.set("page", String(state.currentPage + 1));
+  if (routeState.q && routeState.page > 1) {
+    params.set("page", String(routeState.page));
   }
 
+  if (routeState.view) {
+    params.set("view", routeState.view);
+    params.set("surah", String(routeState.surah));
+    params.set("ayah", String(routeState.ayah));
+
+    if (routeState.view === "mushaf") {
+      params.set("mushafPage", String(routeState.mushafPage));
+    }
+
+    if (routeState.zoom !== MUSHAF_ZOOM_LEVELS[0]) {
+      params.set("zoom", String(routeState.zoom));
+    }
+
+    if (routeState.view === "surah") {
+      const defaultModalLang = routeState.lang[0] || DEFAULT_MAIN_LANGUAGE_KEY;
+      if (routeState.modalLang && routeState.modalLang !== defaultModalLang) {
+        params.set("modalLang", routeState.modalLang);
+      }
+    }
+
+    if (routeState.modalMode !== DEFAULT_MODAL_MODE) {
+      params.set("modalMode", routeState.modalMode);
+    }
+  }
+
+  return params;
+}
+
+function saveRouteBackup(routeStateInput) {
+  if (!window?.localStorage) return;
+
+  try {
+    const routeState = normalizeRouteState(routeStateInput);
+    const payload = {
+      version: ROUTE_BACKUP_VERSION,
+      savedAt: Date.now(),
+      state: routeState,
+    };
+    window.localStorage.setItem(ROUTE_BACKUP_KEY, JSON.stringify(payload));
+  } catch (error) {
+    // storage may be unavailable or full
+  }
+}
+
+function loadRouteBackup() {
+  if (!window?.localStorage) return null;
+
+  try {
+    const raw = window.localStorage.getItem(ROUTE_BACKUP_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    const isValidObject = parsed && typeof parsed === "object";
+    if (!isValidObject || parsed.version !== ROUTE_BACKUP_VERSION) {
+      window.localStorage.removeItem(ROUTE_BACKUP_KEY);
+      return null;
+    }
+
+    const savedAt = Number(parsed.savedAt);
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > ROUTE_BACKUP_MAX_AGE_MS) {
+      window.localStorage.removeItem(ROUTE_BACKUP_KEY);
+      return null;
+    }
+
+    return normalizeRouteState(parsed.state || {});
+  } catch (error) {
+    try {
+      window.localStorage.removeItem(ROUTE_BACKUP_KEY);
+    } catch (cleanupError) {
+      // ignore cleanup errors
+    }
+    return null;
+  }
+}
+
+function syncRouteState(options = {}) {
+  const { history = "replace", saveBackup = true } = options;
+  if (isApplyingRouteState) return;
+
+  const routeState = captureAppRouteState();
+  const params = buildSearchParamsFromRouteState(routeState);
   const queryString = params.toString();
   const nextUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
-  window.history.replaceState({}, "", nextUrl);
+  const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+  if (nextUrl !== currentUrl && window?.history) {
+    const method = history === "push" ? "pushState" : "replaceState";
+    if (typeof window.history[method] === "function") {
+      window.history[method]({}, "", nextUrl);
+    }
+  }
+
+  if (saveBackup) {
+    saveRouteBackup(routeState);
+  }
 }
 
 function updateResultsCount() {
@@ -699,7 +997,11 @@ async function renderResults() {
 }
 
 async function fetchVerseByTopic(options = {}) {
-  const { pageIndex = 0, updateUrl = true } = options;
+  const {
+    pageIndex = 0,
+    syncRoute = true,
+    historyMode = "replace",
+  } = options;
   const topic = elements.topic.value.trim();
   if (!topic) {
     setStatus("Enter a topic to search.", "error");
@@ -757,8 +1059,8 @@ async function fetchVerseByTopic(options = {}) {
 
     const total = uniqueResults.length;
     setStatus(`Found ${total} verse${total === 1 ? "" : "s"}.`, "success");
-    if (updateUrl) {
-      updateUrlState();
+    if (syncRoute) {
+      syncRouteState({ history: historyMode });
     }
   } catch (error) {
     if (searchId !== state.lastSearchId) return;
@@ -1219,7 +1521,12 @@ async function fetchAyahPageNumber(surahNumber, ayahNumber) {
 }
 
 async function openPageView(pageNumber, options = {}) {
-  const { highlightKey = "" } = options;
+  const {
+    highlightKey = "",
+    historyMode = "replace",
+    suppressRouteSync = false,
+  } = options;
+  const requestId = ++modalRenderRequestId;
   const targetPage = clampPageNumber(pageNumber);
   modalState.pageNumber = targetPage;
 
@@ -1229,11 +1536,23 @@ async function openPageView(pageNumber, options = {}) {
     openModal();
   }
 
+  if (!suppressRouteSync) {
+    syncRouteState({ history: historyMode });
+  }
+
   elements.modalTitle.textContent = "Quran Mushaf";
   elements.modalSubtitle.textContent = `Page ${targetPage}`;
+  const loadingSpread = getDesktopSpreadPages(targetPage);
+  const loadingPages = [loadingSpread.leftPage]
+    .concat(loadingSpread.rightPage ? [loadingSpread.rightPage] : [])
+    .filter(Boolean)
+    .map((page) => ({
+      pageNumber: page,
+      state: "loading",
+      isCurrent: page === targetPage,
+    }));
   elements.surahContainer.innerHTML = buildMushafImageMarkup({
-    pageNumber: targetPage,
-    state: "loading",
+    pages: loadingPages,
     zoomPercent: modalState.mushafZoom,
   });
 
@@ -1278,11 +1597,11 @@ async function openPageView(pageNumber, options = {}) {
       }
     })();
 
-    const [data, imageUrl, translationData] = await Promise.all([
+    const [data, translationData] = await Promise.all([
       arabicPagePromise,
-      resolveMushafImageUrl(targetPage),
       translationPromise,
     ]);
+    if (requestId !== modalRenderRequestId) return;
 
     const parsed = parsePageData(data, highlightKey);
     let translationMarkup = "";
@@ -1295,20 +1614,48 @@ async function openPageView(pageNumber, options = {}) {
       );
     }
 
-    const expectedCandidates = getMushafImageCandidates(parsed.pageNumber);
-    const expectedPathLabel = expectedCandidates.join(", ");
+    const spreadPages = getDesktopSpreadPages(parsed.pageNumber);
+    const orderedPages = [spreadPages.leftPage]
+      .concat(spreadPages.rightPage ? [spreadPages.rightPage] : [])
+      .filter(Boolean);
+    const resolvedImageUrls = await Promise.all(
+      orderedPages.map((page) => resolveMushafImageUrl(page))
+    );
+    if (requestId !== modalRenderRequestId) return;
+    const pageImageMap = new Map();
+    orderedPages.forEach((page, index) => {
+      pageImageMap.set(page, resolvedImageUrls[index] || "");
+    });
 
-    if (imageUrl) {
+    const currentImageUrl = pageImageMap.get(parsed.pageNumber) || "";
+    const spreadTiles = orderedPages.map((page) => {
+      const imageUrl = pageImageMap.get(page) || "";
+      return imageUrl
+        ? {
+            pageNumber: page,
+            imageUrl,
+            state: "ready",
+            isCurrent: page === parsed.pageNumber,
+          }
+        : {
+            pageNumber: page,
+            state: "error",
+            errorMessage: `Missing: ${getExpectedMushafPathLabel(page)}`,
+            isCurrent: page === parsed.pageNumber,
+          };
+    });
+
+    if (currentImageUrl) {
       elements.surahContainer.innerHTML =
         buildMushafImageMarkup({
-          pageNumber: parsed.pageNumber,
-          surahLabel: parsed.surahLabel,
-          imageUrl,
-          state: "ready",
+          pages: spreadTiles,
           zoomPercent: modalState.mushafZoom,
         }) + translationMarkup;
-      preloadAdjacentMushafPages(parsed.pageNumber);
+      spreadTiles
+        .filter((tile) => tile.state === "ready")
+        .forEach((tile) => preloadAdjacentMushafPages(tile.pageNumber));
     } else if (ENABLE_TEXT_PAGE_FALLBACK) {
+      const expectedPathLabel = getExpectedMushafPathLabel(parsed.pageNumber);
       const fallbackNotice = `
         <div class="mushaf-image-warning">
           Page image missing for page ${parsed.pageNumber}. Showing text fallback.
@@ -1322,10 +1669,7 @@ async function openPageView(pageNumber, options = {}) {
     } else {
       elements.surahContainer.innerHTML =
         buildMushafImageMarkup({
-          pageNumber: parsed.pageNumber,
-          surahLabel: parsed.surahLabel,
-          state: "error",
-          errorMessage: `Page image unavailable. Add one of: ${expectedPathLabel}`,
+          pages: spreadTiles,
           zoomPercent: modalState.mushafZoom,
         }) + translationMarkup;
     }
@@ -1348,20 +1692,47 @@ async function openPageView(pageNumber, options = {}) {
     syncModalControls();
     applyMushafZoomToCurrentView();
 
+    if (!suppressRouteSync) {
+      syncRouteState({ history: "replace" });
+    }
+
     requestAnimationFrame(() => {
       centerHighlightedVerse();
     });
   } catch (error) {
-    const cachedOrResolvedImageUrl = await resolveMushafImageUrl(targetPage).catch(() => "");
-    if (cachedOrResolvedImageUrl) {
+    if (requestId !== modalRenderRequestId) return;
+    const spreadPages = getDesktopSpreadPages(targetPage);
+    const orderedPages = [spreadPages.leftPage]
+      .concat(spreadPages.rightPage ? [spreadPages.rightPage] : [])
+      .filter(Boolean);
+    const resolvedImageUrls = await Promise.all(
+      orderedPages.map((page) => resolveMushafImageUrl(page).catch(() => ""))
+    );
+    if (requestId !== modalRenderRequestId) return;
+    const spreadTiles = orderedPages.map((page, index) => {
+      const imageUrl = resolvedImageUrls[index] || "";
+      return imageUrl
+        ? {
+            pageNumber: page,
+            imageUrl,
+            state: "ready",
+            isCurrent: page === targetPage,
+          }
+        : {
+            pageNumber: page,
+            state: "error",
+            errorMessage: `Missing: ${getExpectedMushafPathLabel(page)}`,
+            isCurrent: page === targetPage,
+          };
+    });
+
+    if (spreadTiles.some((tile) => tile.state === "ready")) {
       elements.surahContainer.innerHTML = `
         <div class="mushaf-image-warning">
           Verse metadata is unavailable right now. Showing page image only.
         </div>
         ${buildMushafImageMarkup({
-          pageNumber: targetPage,
-          imageUrl: cachedOrResolvedImageUrl,
-          state: "ready",
+          pages: spreadTiles,
           zoomPercent: modalState.mushafZoom,
         })}
       `;
@@ -1370,16 +1741,30 @@ async function openPageView(pageNumber, options = {}) {
     }
 
     elements.surahContainer.innerHTML = buildMushafImageMarkup({
-      pageNumber: targetPage,
-      state: "error",
-      errorMessage: "Unable to load this page right now.",
+      pages: [{
+        pageNumber: targetPage,
+        state: "error",
+        errorMessage: "Unable to load this page right now.",
+        isCurrent: true,
+      }],
       zoomPercent: modalState.mushafZoom,
     });
+
+    if (!suppressRouteSync) {
+      syncRouteState({ history: "replace" });
+    }
   }
 }
 
 async function openSurahModal(surahNumber, ayahNumber, surahName, options = {}) {
-  const { mode, translationSelection, updateControls = true } = options;
+  const {
+    mode,
+    translationSelection,
+    updateControls = true,
+    historyMode = "replace",
+    suppressRouteSync = false,
+  } = options;
+  const requestId = ++modalRenderRequestId;
 
   const normalizedSurah = Math.min(
     Math.max(1, Number(surahNumber) || 1),
@@ -1409,14 +1794,21 @@ async function openSurahModal(surahNumber, ayahNumber, surahName, options = {}) 
       // keep existing page number fallback
     }
 
+    if (requestId !== modalRenderRequestId) return;
     await openPageView(pageNumber, {
       highlightKey: `${normalizedSurah}:${normalizedAyah}`,
+      historyMode,
+      suppressRouteSync,
     });
     return;
   }
 
   openModal();
   updateMedinaStyles();
+
+  if (!suppressRouteSync) {
+    syncRouteState({ history: historyMode });
+  }
 
   const initialName = surahName || getSurahNameFromMeta(normalizedSurah);
   elements.modalTitle.textContent = initialName
@@ -1462,6 +1854,7 @@ async function openSurahModal(surahNumber, ayahNumber, surahName, options = {}) 
     }
 
     const parsed = parseSurahData(data.data || [], normalizedAyah, editionIds);
+    if (requestId !== modalRenderRequestId) return;
     modalState.ayahNumber = parsed.highlightAyah || normalizedAyah;
 
     if (parsed.surahName) {
@@ -1476,12 +1869,20 @@ async function openSurahModal(surahNumber, ayahNumber, surahName, options = {}) 
       syncModalControls({ totalAyahs: parsed.totalAyahs });
     }
 
+    if (!suppressRouteSync) {
+      syncRouteState({ history: "replace" });
+    }
+
     requestAnimationFrame(() => {
       centerHighlightedVerse();
     });
   } catch (error) {
+    if (requestId !== modalRenderRequestId) return;
     elements.surahContainer.innerHTML =
       "<div class=\"empty-state\">Unable to load this surah.</div>";
+    if (!suppressRouteSync) {
+      syncRouteState({ history: "replace" });
+    }
   }
 }
 
@@ -1492,11 +1893,16 @@ function openModal() {
   syncNavigationLayout();
 }
 
-function closeModal() {
+function closeModal(options = {}) {
+  const { historyMode = "push", suppressRouteSync = false } = options;
+  modalRenderRequestId += 1;
   elements.modal.classList.remove("is-open");
   elements.modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
   setNavOverlay(false);
+  if (!suppressRouteSync) {
+    syncRouteState({ history: historyMode });
+  }
 }
 
 function centerHighlightedVerse() {
@@ -1526,7 +1932,7 @@ function changePage(delta) {
   if (nextPage === state.currentPage) return;
   state.currentPage = nextPage;
   renderResults();
-  updateUrlState();
+  syncRouteState({ history: "replace" });
 }
 
 function handleLanguageChange() {
@@ -1537,14 +1943,28 @@ function handleLanguageChange() {
   if (!modalState.translationTouched) {
     syncModalSelectionFromMain();
   }
-  updateUrlState();
+  syncRouteState({ history: "replace" });
 }
 
 function handleBrowseClick() {
   if (!modalState.translationTouched) {
     syncModalSelectionFromMain();
   }
-  openSurahModal(1, 1, getSurahNameFromMeta(1), { mode: "browse" });
+  openSurahModal(1, 1, getSurahNameFromMeta(1), {
+    mode: "browse",
+    historyMode: "push",
+  });
+}
+
+function handleArabicQuickAccess() {
+  openSurahModal(1, 1, getSurahNameFromMeta(1), {
+    mode: "browse",
+    historyMode: "push",
+    translationSelection: {
+      arabicOnly: true,
+      keys: [],
+    },
+  });
 }
 
 function handleModalNavSubmit(event) {
@@ -1557,16 +1977,17 @@ function handleModalNavSubmit(event) {
     fetchAyahPageNumber(surahNumber, ayahNumber)
       .then((pageNumber) => {
         const targetPage = pageNumber || modalState.pageNumber || 1;
-        openPageView(targetPage, { highlightKey });
+        openPageView(targetPage, { highlightKey, historyMode: "replace" });
       })
       .catch(() => {
-        openPageView(modalState.pageNumber || 1, { highlightKey });
+        openPageView(modalState.pageNumber || 1, { highlightKey, historyMode: "replace" });
       });
     return;
   }
 
   openSurahModal(surahNumber, ayahNumber, getSurahNameFromMeta(surahNumber), {
     mode: "browse",
+    historyMode: "replace",
   });
 }
 
@@ -1581,7 +2002,10 @@ function handleModalTranslationChange() {
 
   if (modalState.arabicOnly) {
     const highlightKey = `${modalState.surahNumber}:${modalState.ayahNumber}`;
-    openPageView(modalState.pageNumber || 1, { highlightKey });
+    openPageView(modalState.pageNumber || 1, {
+      highlightKey,
+      historyMode: "replace",
+    });
     return;
   }
 
@@ -1589,7 +2013,10 @@ function handleModalTranslationChange() {
     modalState.surahNumber,
     modalState.ayahNumber,
     getSurahNameFromMeta(modalState.surahNumber),
-    { mode: modalState.mode }
+    {
+      mode: modalState.mode,
+      historyMode: "replace",
+    }
   );
 }
 
@@ -1597,11 +2024,13 @@ function handleMushafZoomChange() {
   if (!elements.mushafZoom) return;
   modalState.mushafZoom = clampMushafZoom(elements.mushafZoom.value);
   applyMushafZoomToCurrentView();
+  syncRouteState({ history: "replace" });
 }
 
 function changeMushafPage(delta) {
   if (!isPageViewActive()) return;
-  const nextPage = clampPageNumber(modalState.pageNumber + delta);
+  const step = shouldUseTwoPageSpread() ? 2 : 1;
+  const nextPage = clampPageNumber(modalState.pageNumber + (delta * step));
   if (nextPage === modalState.pageNumber) return;
   openPageView(nextPage);
 }
@@ -1655,7 +2084,10 @@ async function handleResultsClick(event) {
     });
   }
 
-  openSurahModal(surahNumber, ayahNumber, surahName, { mode: "search" });
+  openSurahModal(surahNumber, ayahNumber, surahName, {
+    mode: "search",
+    historyMode: "push",
+  });
 }
 
 function handleModalClick(event) {
@@ -1667,9 +2099,10 @@ function handleModalClick(event) {
 
 elements.searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  fetchVerseByTopic();
+  fetchVerseByTopic({ historyMode: "push" });
 });
 elements.browseBtn.addEventListener("click", handleBrowseClick);
+elements.arabicQuickBtn.addEventListener("click", handleArabicQuickAccess);
 elements.topic.addEventListener("input", () => autoResize(elements.topic));
 elements.prevBtn.addEventListener("click", () => changePage(-1));
 elements.nextBtn.addEventListener("click", () => changePage(1));
@@ -1693,6 +2126,24 @@ elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { pas
 elements.surahContainer.addEventListener("touchend", handlePageSwipeEnd, { passive: true });
 window.addEventListener("resize", () => {
   if (!elements.modal.classList.contains("is-open")) return;
+  const inlineNow = useInlineNav();
+  const spreadNow = shouldUseTwoPageSpread();
+  const layoutChanged =
+    inlineNow !== lastInlineNavMode ||
+    spreadNow !== lastTwoPageSpreadMode;
+
+  lastInlineNavMode = inlineNow;
+  lastTwoPageSpreadMode = spreadNow;
+
+  if (layoutChanged && isPageViewActive()) {
+    syncNavigationLayout();
+    openPageView(modalState.pageNumber, {
+      highlightKey: `${modalState.surahNumber}:${modalState.ayahNumber}`,
+      suppressRouteSync: true,
+    });
+    return;
+  }
+
   syncNavigationLayout();
 });
 
@@ -1724,34 +2175,100 @@ function applyLanguageFromParams(langParam) {
 
   if (!keys.length) return;
 
-  const inputs = elements.languageOptions.querySelectorAll("input[name='translation']");
-  inputs.forEach((input) => {
-    input.checked = keys.includes(input.value);
-  });
+  setMainLanguageKeys(keys);
 }
 
-function initFromUrl() {
+async function applyRouteState(routeStateInput, options = {}) {
+  const { suppressRouteSync = true } = options;
+  const routeState = normalizeRouteState(routeStateInput);
+  const applyId = ++routeApplyRequestId;
+  isApplyingRouteState = true;
+
+  try {
+    setMainLanguageKeys(routeState.lang);
+    updateEditionKey();
+
+    if (!modalState.translationTouched) {
+      syncModalSelectionFromMain();
+    }
+
+    if (routeState.q) {
+      elements.topic.value = routeState.q;
+      autoResize(elements.topic);
+      await fetchVerseByTopic({
+        pageIndex: Math.max(routeState.page - 1, 0),
+        syncRoute: false,
+      });
+      if (applyId !== routeApplyRequestId) return;
+    } else {
+      state.results = [];
+      state.currentPage = 0;
+      state.pendingPage = 0;
+      state.currentQuery = "";
+      verseCache.clear();
+      elements.topic.value = "";
+      autoResize(elements.topic);
+      renderEmptyState("Search for a topic to see results.");
+      setStatus("", "info");
+    }
+
+    if (applyId !== routeApplyRequestId) return;
+
+    modalState.mode = routeState.modalMode;
+    modalState.mushafZoom = routeState.zoom;
+    modalState.surahNumber = routeState.surah;
+    modalState.ayahNumber = routeState.ayah;
+    modalState.pageNumber = routeState.mushafPage;
+
+    if (routeState.view === "mushaf") {
+      setModalTranslationSelection({ arabicOnly: true, keys: [] }, { touch: true });
+      await openPageView(routeState.mushafPage, {
+        highlightKey: `${routeState.surah}:${routeState.ayah}`,
+        suppressRouteSync: true,
+      });
+    } else if (routeState.view === "surah") {
+      const modalLangKey =
+        routeState.modalLang && routeState.modalLang !== "arabic"
+          ? routeState.modalLang
+          : (routeState.lang[0] || DEFAULT_MAIN_LANGUAGE_KEY);
+
+      await openSurahModal(routeState.surah, routeState.ayah, getSurahNameFromMeta(routeState.surah), {
+        mode: routeState.modalMode,
+        translationSelection: {
+          arabicOnly: false,
+          keys: [modalLangKey],
+        },
+        suppressRouteSync: true,
+      });
+    } else {
+      closeModal({ suppressRouteSync: true });
+    }
+  } finally {
+    if (applyId === routeApplyRequestId) {
+      isApplyingRouteState = false;
+    }
+  }
+
+  if (!suppressRouteSync && applyId === routeApplyRequestId) {
+    syncRouteState({ history: "replace" });
+  }
+}
+
+async function bootstrapFromRoute() {
   const params = new URLSearchParams(window.location.search);
-  const query = params.get("q");
-  const lang = params.get("lang");
-  const pageParam = Number.parseInt(params.get("page"), 10);
+  const routeState = hasAnyRouteParams(params)
+    ? parseRouteStateFromUrl(params)
+    : (loadRouteBackup() || parseRouteStateFromUrl(params));
 
-  if (lang) {
-    applyLanguageFromParams(lang);
-  }
-
-  updateEditionKey();
-  if (!modalState.translationTouched) {
-    syncModalSelectionFromMain();
-  }
-
-  if (query) {
-    elements.topic.value = query;
-    autoResize(elements.topic);
-    const pageIndex = Number.isFinite(pageParam) ? Math.max(pageParam - 1, 0) : 0;
-    fetchVerseByTopic({ pageIndex, updateUrl: false });
-  }
+  await applyRouteState(routeState, { suppressRouteSync: true });
+  syncRouteState({ history: "replace", saveBackup: true });
 }
 
-initFromUrl();
+window.addEventListener("popstate", () => {
+  const params = new URLSearchParams(window.location.search);
+  const routeState = parseRouteStateFromUrl(params);
+  applyRouteState(routeState, { suppressRouteSync: false });
+});
+
+bootstrapFromRoute();
 loadSurahList();
