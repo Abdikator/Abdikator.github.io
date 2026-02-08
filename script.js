@@ -27,6 +27,12 @@ const CHAPTER_MENU_CANCEL_MOVE_PX = 12;
 const CHAPTER_MENU_VISIBLE_ROWS = 7;
 const CHAPTER_MENU_HALF_WINDOW = 3;
 const CHAPTER_MENU_PX_PER_STEP = 22;
+const CHAPTER_MENU_TAP_MAX_MOVE_PX = 10;
+const CHAPTER_MENU_TAP_MAX_MS = 260;
+const CHAPTER_MENU_VELOCITY_GAIN = 1.4;
+const CHAPTER_MENU_MAX_SPEED_MULTIPLIER = 3.8;
+const CHAPTER_MENU_MOMENTUM_MIN_VELOCITY = 0.08;
+const CHAPTER_MENU_MOMENTUM_DECAY_PER_FRAME = 0.9;
 const DEFAULT_MAIN_LANGUAGE_KEY = "en";
 const DEFAULT_MODAL_MODE = "browse";
 const ROUTE_PARAM_KEYS = [
@@ -250,6 +256,12 @@ let chapterMenuState = {
   lastY: null,
   accumulatedDeltaY: 0,
   selectedSurah: 1,
+  isDragging: false,
+  lastMoveTs: 0,
+  velocityY: 0,
+  momentumRafId: null,
+  momentumLastTs: 0,
+  tapCandidate: null,
   isCommitting: false,
 };
 let lastInlineNavMode = DESKTOP_NAV_QUERY.matches;
@@ -624,6 +636,14 @@ function clearChapterMenuLongPressTimer() {
   }
 }
 
+function stopChapterMenuMomentum() {
+  if (chapterMenuState.momentumRafId !== null) {
+    cancelAnimationFrame(chapterMenuState.momentumRafId);
+    chapterMenuState.momentumRafId = null;
+  }
+  chapterMenuState.momentumLastTs = 0;
+}
+
 function setChapterMenuOverlayActive(active) {
   if (!elements.chapterMenuOverlay) return;
   elements.chapterMenuOverlay.classList.toggle("is-active", active);
@@ -639,16 +659,21 @@ function resetChapterMenuTouchTracking() {
   chapterMenuState.startY = null;
   chapterMenuState.lastY = null;
   chapterMenuState.accumulatedDeltaY = 0;
+  chapterMenuState.isDragging = false;
+  chapterMenuState.lastMoveTs = 0;
+  chapterMenuState.tapCandidate = null;
 }
 
 function resetChapterMenuState() {
   chapterMenuState.active = false;
   chapterMenuState.selectedSurah = clampSurahNumber(modalState.surahNumber || 1);
+  chapterMenuState.velocityY = 0;
   resetChapterMenuTouchTracking();
 }
 
 function cancelChapterMenuInteraction() {
   clearChapterMenuLongPressTimer();
+  stopChapterMenuMomentum();
   setChapterMenuOverlayActive(false);
   if (elements.chapterMenuOverlay) {
     elements.chapterMenuOverlay.style.removeProperty("--chapter-menu-top");
@@ -770,6 +795,63 @@ function syncChapterMenuPanelBounds() {
   elements.chapterMenuOverlay.style.setProperty("--chapter-menu-height", `${Math.round(panelHeight)}px`);
 }
 
+function applyChapterMenuDelta(deltaY, velocityAbs = 0) {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return;
+  const speedMultiplier = Math.min(
+    CHAPTER_MENU_MAX_SPEED_MULTIPLIER,
+    1 + (Math.max(0, velocityAbs) * CHAPTER_MENU_VELOCITY_GAIN)
+  );
+  const effectivePxPerStep = Math.max(4, CHAPTER_MENU_PX_PER_STEP / speedMultiplier);
+  chapterMenuState.accumulatedDeltaY += deltaY;
+
+  const stepDelta = Math.trunc(chapterMenuState.accumulatedDeltaY / effectivePxPerStep);
+  if (stepDelta === 0) return;
+
+  chapterMenuState.accumulatedDeltaY -= stepDelta * effectivePxPerStep;
+  chapterMenuState.selectedSurah = wrapSurahNumber(chapterMenuState.selectedSurah - stepDelta);
+  renderChapterMenu(chapterMenuState.selectedSurah);
+}
+
+function startChapterMenuMomentum(initialVelocityY) {
+  if (!chapterMenuState.active || chapterMenuState.isCommitting) return;
+  stopChapterMenuMomentum();
+
+  let velocityY = Number(initialVelocityY) || 0;
+  if (Math.abs(velocityY) < CHAPTER_MENU_MOMENTUM_MIN_VELOCITY) {
+    chapterMenuState.velocityY = 0;
+    return;
+  }
+
+  chapterMenuState.velocityY = velocityY;
+  chapterMenuState.momentumLastTs = performance.now();
+
+  const tick = (ts) => {
+    if (!chapterMenuState.active || chapterMenuState.isDragging || chapterMenuState.isCommitting) {
+      stopChapterMenuMomentum();
+      chapterMenuState.velocityY = 0;
+      return;
+    }
+
+    const dt = Math.max(8, Math.min(36, ts - (chapterMenuState.momentumLastTs || ts)));
+    chapterMenuState.momentumLastTs = ts;
+    applyChapterMenuDelta(velocityY * dt, Math.abs(velocityY));
+
+    const decay = Math.pow(CHAPTER_MENU_MOMENTUM_DECAY_PER_FRAME, dt / 16.67);
+    velocityY *= decay;
+    chapterMenuState.velocityY = velocityY;
+
+    if (Math.abs(velocityY) < CHAPTER_MENU_MOMENTUM_MIN_VELOCITY) {
+      stopChapterMenuMomentum();
+      chapterMenuState.velocityY = 0;
+      return;
+    }
+
+    chapterMenuState.momentumRafId = requestAnimationFrame(tick);
+  };
+
+  chapterMenuState.momentumRafId = requestAnimationFrame(tick);
+}
+
 function activateChapterMenu() {
   if (
     !canUseChapterMenu() ||
@@ -780,10 +862,15 @@ function activateChapterMenu() {
     return;
   }
 
+  stopChapterMenuMomentum();
   chapterMenuState.active = true;
   chapterMenuState.lastY = chapterMenuState.startY;
   chapterMenuState.accumulatedDeltaY = 0;
   chapterMenuState.selectedSurah = clampSurahNumber(modalState.surahNumber || 1);
+  chapterMenuState.velocityY = 0;
+  chapterMenuState.isDragging = false;
+  chapterMenuState.lastMoveTs = performance.now();
+  chapterMenuState.tapCandidate = null;
   syncChapterMenuPanelBounds();
   setChapterMenuOverlayActive(true);
   renderChapterMenu(chapterMenuState.selectedSurah);
@@ -791,33 +878,39 @@ function activateChapterMenu() {
 
 function startChapterMenuLongPress(touch) {
   clearChapterMenuLongPressTimer();
+  stopChapterMenuMomentum();
   chapterMenuState.trackingTouchId = touch.identifier;
   chapterMenuState.startX = touch.clientX;
   chapterMenuState.startY = touch.clientY;
   chapterMenuState.lastY = touch.clientY;
   chapterMenuState.accumulatedDeltaY = 0;
+  chapterMenuState.velocityY = 0;
+  chapterMenuState.isDragging = false;
+  chapterMenuState.lastMoveTs = performance.now();
+  chapterMenuState.tapCandidate = null;
   chapterMenuState.longPressTimer = setTimeout(() => {
     clearChapterMenuLongPressTimer();
     activateChapterMenu();
   }, CHAPTER_MENU_LONG_PRESS_MS);
 }
 
-function updateChapterMenuSelectionFromTouch(touch) {
+function updateChapterMenuSelectionFromTouch(touch, now = performance.now()) {
   if (!chapterMenuState.active || !touch) return;
   if (!Number.isFinite(chapterMenuState.lastY)) {
     chapterMenuState.lastY = touch.clientY;
+    chapterMenuState.lastMoveTs = now;
+    return;
   }
 
   const deltaY = touch.clientY - chapterMenuState.lastY;
+  const elapsed = Math.max(1, now - (chapterMenuState.lastMoveTs || now));
+  const instantVelocityY = deltaY / elapsed;
+  chapterMenuState.velocityY =
+    (chapterMenuState.velocityY * 0.65) + (instantVelocityY * 0.35);
+
   chapterMenuState.lastY = touch.clientY;
-  chapterMenuState.accumulatedDeltaY += deltaY;
-
-  const stepDelta = Math.trunc(chapterMenuState.accumulatedDeltaY / CHAPTER_MENU_PX_PER_STEP);
-  if (stepDelta === 0) return;
-
-  chapterMenuState.accumulatedDeltaY -= stepDelta * CHAPTER_MENU_PX_PER_STEP;
-  chapterMenuState.selectedSurah = wrapSurahNumber(chapterMenuState.selectedSurah - stepDelta);
-  renderChapterMenu(chapterMenuState.selectedSurah);
+  chapterMenuState.lastMoveTs = now;
+  applyChapterMenuDelta(deltaY, Math.abs(chapterMenuState.velocityY));
 }
 
 async function resolveSurahStartPage(surahNumber) {
@@ -859,9 +952,15 @@ async function commitChapterMenuSelection(surahNumber) {
   }
 }
 
+function closeChapterMenuIfOpen() {
+  if (chapterMenuState.active || isChapterMenuLongPressPending()) {
+    cancelChapterMenuInteraction();
+  }
+}
+
 function setNavOverlay(open) {
   if (!elements.navOverlay || !elements.navToggle) return;
-  cancelChapterMenuInteraction();
+  closeChapterMenuIfOpen();
 
   if (useInlineNav()) {
     elements.navToggle.hidden = true;
@@ -888,6 +987,7 @@ function syncNavigationLayout() {
 }
 
 function toggleNavOverlay() {
+  closeChapterMenuIfOpen();
   if (useInlineNav()) return;
   if (!elements.navOverlay) return;
   setNavOverlay(!elements.navOverlay.classList.contains("is-open"));
@@ -916,7 +1016,8 @@ function handleChapterMenuOverlayClick(event) {
     return;
   }
 
-  if (event.target === elements.chapterMenuOverlay) {
+  const backdrop = event.target.closest("[data-role='chapter-menu-backdrop']");
+  if (backdrop) {
     cancelChapterMenuInteraction();
   }
 }
@@ -926,15 +1027,26 @@ function handleChapterMenuOverlayTouchStart(event) {
   const touch = event.touches ? event.touches[0] : null;
   if (!touch) return;
 
+  stopChapterMenuMomentum();
   chapterMenuState.trackingTouchId = touch.identifier;
   chapterMenuState.startX = touch.clientX;
   chapterMenuState.startY = touch.clientY;
   chapterMenuState.lastY = touch.clientY;
   chapterMenuState.accumulatedDeltaY = 0;
+  chapterMenuState.velocityY = 0;
+  chapterMenuState.isDragging = false;
+  chapterMenuState.lastMoveTs = performance.now();
 
-  if (event.cancelable) {
-    event.preventDefault();
-  }
+  const selectButton = event.target.closest("[data-role='chapter-menu-select']");
+  const backdrop = event.target.closest("[data-role='chapter-menu-backdrop']");
+  chapterMenuState.tapCandidate = {
+    x: touch.clientX,
+    y: touch.clientY,
+    ts: chapterMenuState.lastMoveTs,
+    selectSurah: selectButton ? Number(selectButton.dataset.surah) : null,
+    isBackdrop: Boolean(backdrop),
+    moved: false,
+  };
 }
 
 function handleChapterMenuOverlayTouchMove(event) {
@@ -942,17 +1054,84 @@ function handleChapterMenuOverlayTouchMove(event) {
   const trackedTouch = getTrackedTouchFromEvent(event);
   if (!trackedTouch) return;
 
+  const dx = trackedTouch.clientX - chapterMenuState.startX;
+  const dy = trackedTouch.clientY - chapterMenuState.startY;
+  const dragDistance = Math.hypot(dx, dy);
+  if (!chapterMenuState.isDragging && dragDistance > CHAPTER_MENU_TAP_MAX_MOVE_PX) {
+    chapterMenuState.isDragging = true;
+    if (chapterMenuState.tapCandidate) {
+      chapterMenuState.tapCandidate.moved = true;
+    }
+  }
+
+  if (!chapterMenuState.isDragging) {
+    return;
+  }
+
   if (event.cancelable) {
     event.preventDefault();
   }
-  updateChapterMenuSelectionFromTouch(trackedTouch);
+
+  updateChapterMenuSelectionFromTouch(trackedTouch, performance.now());
 }
 
 function handleChapterMenuOverlayTouchEnd(event) {
   if (!chapterMenuState.active) return;
-  if (event.cancelable) {
-    event.preventDefault();
+  const trackedTouch = getTrackedTouchFromEvent(event);
+  const now = performance.now();
+  const tapCandidate = chapterMenuState.tapCandidate;
+  const wasDragging = chapterMenuState.isDragging;
+  const releaseVelocityY = chapterMenuState.velocityY;
+  const touchTarget = trackedTouch?.target || event.target;
+  let handledTap = false;
+
+  if (tapCandidate && trackedTouch && !wasDragging) {
+    const movedDistance = Math.hypot(
+      trackedTouch.clientX - tapCandidate.x,
+      trackedTouch.clientY - tapCandidate.y
+    );
+    const isTap =
+      movedDistance <= CHAPTER_MENU_TAP_MAX_MOVE_PX &&
+      (now - tapCandidate.ts) <= CHAPTER_MENU_TAP_MAX_MS &&
+      !tapCandidate.moved;
+
+    if (isTap && Number.isFinite(tapCandidate.selectSurah) && tapCandidate.selectSurah >= 1) {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      handledTap = true;
+      const selectedSurah = wrapSurahNumber(tapCandidate.selectSurah);
+      cancelChapterMenuInteraction();
+      void commitChapterMenuSelection(selectedSurah);
+    } else if (
+      isTap &&
+      (
+        tapCandidate.isBackdrop ||
+        Boolean(touchTarget?.closest?.("[data-role='chapter-menu-backdrop']"))
+      )
+    ) {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      handledTap = true;
+      cancelChapterMenuInteraction();
+    }
   }
+
+  if (handledTap) {
+    resetChapterMenuTouchTracking();
+    return;
+  }
+
+  if (wasDragging) {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    resetChapterMenuTouchTracking();
+    startChapterMenuMomentum(releaseVelocityY);
+    return;
+  }
+
   resetChapterMenuTouchTracking();
 }
 
@@ -2573,6 +2752,7 @@ function handleArabicQuickAccess() {
 
 async function handleModalNavSubmit(event) {
   event.preventDefault();
+  closeChapterMenuIfOpen();
   const surahNumber = Number(elements.surahSelect.value) || 1;
   const ayahNumber = Number(elements.ayahInput.value) || 1;
   modalState.surahNumber = Math.min(Math.max(1, surahNumber), TOTAL_SURAHS);
@@ -2610,6 +2790,7 @@ function handleSurahSelectChange() {
 }
 
 function handleModalTranslationChange() {
+  closeChapterMenuIfOpen();
   const selection = readModalTranslationSelection();
   setModalTranslationSelection(selection, { touch: true });
 
@@ -2635,12 +2816,14 @@ function handleModalTranslationChange() {
 
 function handleMushafZoomChange() {
   if (!elements.mushafZoom) return;
+  closeChapterMenuIfOpen();
   modalState.mushafZoom = clampMushafZoom(elements.mushafZoom.value);
   applyMushafZoomToCurrentView();
   syncRouteState({ history: "replace" });
 }
 
 function changeMushafPage(delta) {
+  closeChapterMenuIfOpen();
   if (!isMushafInteractionActive()) return;
   const step = shouldUseTwoPageSpread() ? 2 : 1;
   const nextPage = clampPageNumber(modalState.pageNumber + (delta * step));
@@ -2649,6 +2832,7 @@ function changeMushafPage(delta) {
 }
 
 function handlePageInputChange() {
+  closeChapterMenuIfOpen();
   if (!isMushafInteractionActive()) return;
   const pageValue = clampPageNumber(elements.pageInput.value);
   openPageView(pageValue);
