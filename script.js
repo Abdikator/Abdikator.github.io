@@ -16,11 +16,20 @@ const BASMALAH_REGEX = new RegExp(
 const DESKTOP_NAV_QUERY = window.matchMedia("(min-width: 701px)");
 const TWO_PAGE_SPREAD_QUERY = window.matchMedia("(min-width: 1100px)");
 const MOBILE_CHAPTER_MENU_QUERY = window.matchMedia("(max-width: 700px) and (pointer: coarse)");
+const REDUCED_MOTION_QUERY = window.matchMedia("(prefers-reduced-motion: reduce)");
 const MUSHAF_IMAGE_BASE = "assets/mushaf-pages";
 const MUSHAF_IMAGE_EXT = "webp";
 const MUSHAF_IMAGE_FALLBACK_EXT = "png";
 const ENABLE_TEXT_PAGE_FALLBACK = true;
 const MUSHAF_ZOOM_LEVELS = [100, 125, 150];
+const PAGE_TURN_SWIPE_THRESHOLD_PX = 55;
+const PAGE_TURN_DRAG_ROTATION_MAX_DEG = 34;
+const PAGE_TURN_EXIT_ROTATION_DEG = 72;
+const PAGE_TURN_EXIT_SHIFT_PX = 44;
+const PAGE_TURN_ENTER_ROTATION_DEG = 16;
+const PAGE_TURN_ENTER_SHIFT_PX = 24;
+const PAGE_TURN_EXIT_MS = 320;
+const PAGE_TURN_ENTER_MS = 300;
 const CHAPTER_MENU_LONG_PRESS_MS = 380;
 const CHAPTER_MENU_EDGE_ZONE_PX = 36;
 const CHAPTER_MENU_CANCEL_MOVE_PX = 12;
@@ -1152,6 +1161,184 @@ function handleChapterMenuOverlayTouchCancel() {
   cancelChapterMenuInteraction();
 }
 
+function getMushafStageRefs() {
+  const canvas = elements.surahContainer?.querySelector(".mushaf-page-canvas") || null;
+  const stage = canvas?.querySelector(".mushaf-image-stage") || null;
+  return { canvas, stage };
+}
+
+function buildMushafStageTransform(translateX = 0, rotateY = 0) {
+  return `translateX(${translateX}px) rotateY(${rotateY}deg) scale(var(--mushaf-zoom, 1))`;
+}
+
+function setMushafTurnDirection(canvas, direction) {
+  if (!canvas) return;
+  canvas.classList.add("is-page-turning");
+  canvas.classList.toggle("is-turn-forward", direction > 0);
+  canvas.classList.toggle("is-turn-backward", direction < 0);
+}
+
+function clearMushafTurnDirection(canvas) {
+  if (!canvas) return;
+  canvas.classList.remove("is-page-turning", "is-turn-forward", "is-turn-backward");
+  canvas.style.removeProperty("--turn-progress");
+}
+
+function resetMushafStageInlineStyles(stage) {
+  if (!stage) return;
+  stage.classList.remove("is-swiping");
+  stage.style.transition = "";
+  stage.style.transform = "";
+  stage.style.transformOrigin = "";
+  stage.style.opacity = "";
+  stage.style.filter = "";
+  stage.style.willChange = "";
+}
+
+function settleMushafTurnReset() {
+  const { canvas, stage } = getMushafStageRefs();
+  if (!stage) {
+    clearMushafTurnDirection(canvas);
+    return;
+  }
+
+  stage.classList.remove("is-swiping");
+  stage.style.transition = "transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, filter 220ms ease";
+  stage.style.transformOrigin = "center center";
+  stage.style.transform = buildMushafStageTransform(0, 0);
+  stage.style.opacity = "1";
+  stage.style.filter = "brightness(1)";
+  stage.style.willChange = "transform, opacity, filter";
+  if (canvas) {
+    canvas.style.setProperty("--turn-progress", "0");
+  }
+
+  let settled = false;
+  const cleanup = () => {
+    if (settled) return;
+    settled = true;
+    resetMushafStageInlineStyles(stage);
+    clearMushafTurnDirection(canvas);
+  };
+
+  stage.addEventListener("transitionend", cleanup, { once: true });
+  setTimeout(cleanup, 340);
+}
+
+function applyMushafDragTurn(dx) {
+  const { canvas, stage } = getMushafStageRefs();
+  if (!stage) return;
+
+  const direction = dx >= 0 ? 1 : -1;
+  const softenedDx = dx > 0
+    ? Math.min(dx, 165 + (dx - 165) * 0.18)
+    : Math.max(dx, -165 + (dx + 165) * 0.18);
+  const width = Math.max(canvas?.clientWidth || 1, 1);
+  const normalized = Math.min(Math.abs(softenedDx) / Math.max(width * 0.32, PAGE_TURN_SWIPE_THRESHOLD_PX), 1);
+  const rotationBase = (softenedDx / Math.max(width * 0.58, 1)) * PAGE_TURN_DRAG_ROTATION_MAX_DEG;
+  const rotation = Math.max(
+    -PAGE_TURN_DRAG_ROTATION_MAX_DEG,
+    Math.min(PAGE_TURN_DRAG_ROTATION_MAX_DEG, rotationBase)
+  );
+
+  stage.classList.add("is-swiping");
+  stage.style.transition = "none";
+  stage.style.transformOrigin = direction > 0 ? "left center" : "right center";
+  stage.style.transform = buildMushafStageTransform(softenedDx * 0.22, rotation);
+  stage.style.opacity = String(1 - normalized * 0.24);
+  stage.style.filter = `brightness(${1 - normalized * 0.18})`;
+  stage.style.willChange = "transform, opacity, filter";
+
+  if (canvas) {
+    setMushafTurnDirection(canvas, direction);
+    canvas.style.setProperty("--turn-progress", normalized.toFixed(3));
+  }
+}
+
+function runMushafTurnExitAnimation(direction) {
+  const { canvas, stage } = getMushafStageRefs();
+  if (!stage || !direction || REDUCED_MOTION_QUERY.matches) {
+    resetMushafStageInlineStyles(stage);
+    clearMushafTurnDirection(canvas);
+    return Promise.resolve();
+  }
+
+  const safeDirection = direction > 0 ? 1 : -1;
+  const targetRotation = safeDirection * PAGE_TURN_EXIT_ROTATION_DEG;
+  const targetShift = safeDirection * PAGE_TURN_EXIT_SHIFT_PX;
+
+  stage.classList.remove("is-swiping");
+  stage.style.transition = `transform ${PAGE_TURN_EXIT_MS}ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity ${Math.round(PAGE_TURN_EXIT_MS * 0.85)}ms ease, filter ${Math.round(PAGE_TURN_EXIT_MS * 0.75)}ms ease`;
+  stage.style.transformOrigin = safeDirection > 0 ? "left center" : "right center";
+  stage.style.willChange = "transform, opacity, filter";
+
+  if (canvas) {
+    setMushafTurnDirection(canvas, safeDirection);
+    canvas.style.setProperty("--turn-progress", "1");
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    stage.addEventListener("transitionend", cleanup, { once: true });
+    requestAnimationFrame(() => {
+      stage.style.transform = buildMushafStageTransform(targetShift, targetRotation);
+      stage.style.opacity = "0.26";
+      stage.style.filter = "brightness(0.8)";
+    });
+    setTimeout(cleanup, PAGE_TURN_EXIT_MS + 80);
+  });
+}
+
+function runMushafTurnEnterAnimation(direction) {
+  if (!direction || REDUCED_MOTION_QUERY.matches) return;
+  const { canvas, stage } = getMushafStageRefs();
+  if (!stage) return;
+
+  const safeDirection = direction > 0 ? 1 : -1;
+  const startRotation = -safeDirection * PAGE_TURN_ENTER_ROTATION_DEG;
+  const startShift = -safeDirection * PAGE_TURN_ENTER_SHIFT_PX;
+
+  if (canvas) {
+    setMushafTurnDirection(canvas, safeDirection);
+    canvas.style.setProperty("--turn-progress", "0.55");
+  }
+
+  stage.style.transition = "none";
+  stage.style.transformOrigin = safeDirection > 0 ? "right center" : "left center";
+  stage.style.transform = buildMushafStageTransform(startShift, startRotation);
+  stage.style.opacity = "0.58";
+  stage.style.filter = "brightness(0.86)";
+  stage.style.willChange = "transform, opacity, filter";
+
+  requestAnimationFrame(() => {
+    stage.style.transition = `transform ${PAGE_TURN_ENTER_MS}ms cubic-bezier(0.16, 1, 0.3, 1), opacity ${Math.round(PAGE_TURN_ENTER_MS * 0.8)}ms ease, filter ${Math.round(PAGE_TURN_ENTER_MS * 0.8)}ms ease`;
+    stage.style.transformOrigin = "center center";
+    stage.style.transform = buildMushafStageTransform(0, 0);
+    stage.style.opacity = "1";
+    stage.style.filter = "brightness(1)";
+    if (canvas) {
+      canvas.style.setProperty("--turn-progress", "0");
+    }
+
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      resetMushafStageInlineStyles(stage);
+      clearMushafTurnDirection(canvas);
+    };
+
+    stage.addEventListener("transitionend", cleanup, { once: true });
+    setTimeout(cleanup, PAGE_TURN_ENTER_MS + 80);
+  });
+}
+
 function handlePageSwipeStart(event) {
   if (!isPageViewActive()) return;
 
@@ -1163,11 +1350,15 @@ function handlePageSwipeStart(event) {
   pageSwipeStartX = touch.clientX;
   pageSwipeStartY = touch.clientY;
 
-  // Prepare image stage for drag — disable transition while actively dragging
-  const stage = elements.surahContainer?.querySelector(".mushaf-image-stage");
+  const { stage } = getMushafStageRefs();
   if (stage) {
     stage.classList.add("is-swiping");
-    stage.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(0px)`;
+    stage.style.transition = "none";
+    stage.style.transform = buildMushafStageTransform(0, 0);
+    stage.style.transformOrigin = "center center";
+    stage.style.opacity = "1";
+    stage.style.filter = "brightness(1)";
+    stage.style.willChange = "transform, opacity, filter";
   }
 }
 
@@ -1192,11 +1383,15 @@ function handlePageSwipeMove(event) {
       cancelChapterMenuInteraction();
       pageSwipeStartX = fallbackStartX;
       pageSwipeStartY = fallbackStartY;
-      // Ensure stage is prepped for drag
-      const stageEl = elements.surahContainer?.querySelector(".mushaf-image-stage");
-      if (stageEl) {
-        stageEl.classList.add("is-swiping");
-        stageEl.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(0px)`;
+
+      const { stage } = getMushafStageRefs();
+      if (stage) {
+        stage.classList.add("is-swiping");
+        stage.style.transition = "none";
+        stage.style.transform = buildMushafStageTransform(0, 0);
+        stage.style.transformOrigin = "center center";
+        stage.style.opacity = "1";
+        stage.style.filter = "brightness(1)";
       }
     } else {
       if (event.cancelable) {
@@ -1212,36 +1407,10 @@ function handlePageSwipeMove(event) {
   const dy = touch.clientY - pageSwipeStartY;
 
   if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
-    event.preventDefault();
-
-    // Apply live drag translation with resistance beyond 100px
-    const stage = elements.surahContainer?.querySelector(".mushaf-image-stage");
-    if (stage) {
-      const clampedDx = dx > 0
-        ? Math.min(dx, 100 + (dx - 100) * 0.2)
-        : Math.max(dx, -100 + (dx + 100) * 0.2);
-      stage.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(${clampedDx}px)`;
+    if (event.cancelable) {
+      event.preventDefault();
     }
-
-    // Show directional swipe indicator once past threshold
-    const canvas = elements.surahContainer?.querySelector(".mushaf-page-canvas");
-    if (canvas) {
-      const threshold = 55;
-      let indicator = canvas.querySelector(".swipe-indicator");
-      if (!indicator) {
-        indicator = document.createElement("div");
-        indicator.className = "swipe-indicator";
-        canvas.appendChild(indicator);
-      }
-      if (Math.abs(dx) > threshold) {
-        indicator.textContent = dx > 0 ? "›" : "‹";
-        indicator.classList.toggle("is-right", dx > 0);
-        indicator.classList.toggle("is-left", dx <= 0);
-        indicator.classList.add("is-active");
-      } else {
-        indicator.classList.remove("is-active");
-      }
-    }
+    applyMushafDragTurn(dx);
   }
 }
 
@@ -1267,45 +1436,12 @@ function handlePageSwipeEnd(event) {
   const touch = event.changedTouches ? event.changedTouches[0] : event;
   const dx = touch.clientX - pageSwipeStartX;
   const dy = touch.clientY - pageSwipeStartY;
-  const threshold = 55;
 
-  const stage = elements.surahContainer?.querySelector(".mushaf-image-stage");
-  const canvas = elements.surahContainer?.querySelector(".mushaf-page-canvas");
-
-  // Remove indicator
-  canvas?.querySelector(".swipe-indicator")?.remove();
-
-  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
-    // Animate slide-out in swipe direction, then change page
-    if (stage) {
-      stage.classList.remove("is-swiping");
-      stage.classList.add("swipe-exit");
-      const exitX = dx > 0 ? 120 : -120;
-      stage.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(${exitX}px)`;
-    }
-    setTimeout(() => {
-      if (dx > 0) {
-        changeMushafPage(1);
-      } else {
-        changeMushafPage(-1);
-      }
-      // Reset after page changes
-      if (stage) {
-        stage.classList.remove("swipe-exit");
-        stage.style.transform = "";
-      }
-    }, 180);
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > PAGE_TURN_SWIPE_THRESHOLD_PX) {
+    const direction = dx > 0 ? 1 : -1;
+    void changeMushafPage(direction, { fromSwipe: true });
   } else {
-    // Spring back to centre
-    if (stage) {
-      stage.classList.remove("is-swiping");
-      stage.classList.add("swipe-cancel");
-      stage.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(0px)`;
-      stage.addEventListener("transitionend", () => {
-        stage.classList.remove("swipe-cancel");
-        stage.style.transform = "";
-      }, { once: true });
-    }
+    settleMushafTurnReset();
   }
 
   pageSwipeStartX = null;
@@ -1316,19 +1452,7 @@ function handlePageSwipeCancel() {
   cancelChapterMenuInteraction();
   pageSwipeStartX = null;
   pageSwipeStartY = null;
-
-  const stage = elements.surahContainer?.querySelector(".mushaf-image-stage");
-  const canvas = elements.surahContainer?.querySelector(".mushaf-page-canvas");
-  canvas?.querySelector(".swipe-indicator")?.remove();
-  if (stage) {
-    stage.classList.remove("is-swiping", "swipe-exit");
-    stage.classList.add("swipe-cancel");
-    stage.style.transform = `scale(var(--mushaf-zoom, 1)) translateX(0px)`;
-    stage.addEventListener("transitionend", () => {
-      stage.classList.remove("swipe-cancel");
-      stage.style.transform = "";
-    }, { once: true });
-  }
+  settleMushafTurnReset();
 }
 
 function handleMushafContextMenu(event) {
@@ -2386,9 +2510,11 @@ async function openPageView(pageNumber, options = {}) {
     highlightKey = "",
     historyMode = "replace",
     suppressRouteSync = false,
+    pageTurnDirection = 0,
   } = options;
   const requestId = ++modalRenderRequestId;
   const targetPage = clampPageNumber(pageNumber);
+  const turnDirection = Number(pageTurnDirection) || 0;
   cancelChapterMenuInteraction();
 
   if (!modalState.arabicOnly || modalState.translationKeys.length) {
@@ -2561,6 +2687,7 @@ async function openPageView(pageNumber, options = {}) {
     syncPageControls(parsed.pageNumber);
     syncModalControls();
     applyMushafZoomToCurrentView();
+    runMushafTurnEnterAnimation(turnDirection);
 
     if (!suppressRouteSync) {
       syncRouteState({ history: "replace" });
@@ -2607,6 +2734,7 @@ async function openPageView(pageNumber, options = {}) {
         })}
       `;
       applyMushafZoomToCurrentView();
+      runMushafTurnEnterAnimation(turnDirection);
       return;
     }
 
@@ -2619,6 +2747,7 @@ async function openPageView(pageNumber, options = {}) {
       }],
       zoomPercent: modalState.mushafZoom,
     });
+    runMushafTurnEnterAnimation(turnDirection);
 
     if (!suppressRouteSync) {
       syncRouteState({ history: "replace" });
@@ -2910,13 +3039,27 @@ function handleMushafZoomChange() {
   syncRouteState({ history: "replace" });
 }
 
-function changeMushafPage(delta) {
+async function changeMushafPage(delta, options = {}) {
+  const { fromSwipe = false } = options;
   closeChapterMenuIfOpen();
   if (!isMushafInteractionActive()) return;
   const step = shouldUseTwoPageSpread() ? 2 : 1;
   const nextPage = clampPageNumber(modalState.pageNumber + (delta * step));
-  if (nextPage === modalState.pageNumber) return;
-  openPageView(nextPage);
+  if (nextPage === modalState.pageNumber) {
+    if (fromSwipe) {
+      settleMushafTurnReset();
+    }
+    return;
+  }
+
+  const direction = Math.sign(delta || (nextPage - modalState.pageNumber));
+  if (!REDUCED_MOTION_QUERY.matches) {
+    await runMushafTurnExitAnimation(direction);
+  }
+
+  await openPageView(nextPage, {
+    pageTurnDirection: REDUCED_MOTION_QUERY.matches ? 0 : direction,
+  });
 }
 
 function handlePageInputChange() {
