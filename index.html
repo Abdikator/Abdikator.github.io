@@ -1202,6 +1202,45 @@
       transition: transform 0.2s ease;
     }
 
+    /* Swipe drag states */
+    .mushaf-image-stage.is-swiping {
+      transition: none;
+    }
+    .mushaf-image-stage.swipe-cancel {
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .mushaf-image-stage.swipe-exit {
+      transition: transform 0.18s ease-in;
+      pointer-events: none;
+    }
+
+    /* Directional swipe indicator */
+    .mushaf-page-canvas {
+      position: relative;
+    }
+    .swipe-indicator {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(100, 210, 160, 0.88);
+      color: #fff;
+      font-size: 28px;
+      line-height: 52px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+      z-index: 20;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+      user-select: none;
+    }
+    .swipe-indicator.is-right { right: 18px; }
+    .swipe-indicator.is-left  { left:  18px; }
+    .swipe-indicator.is-active { opacity: 1; }
+
     .mushaf-spread {
       width: min(100%, 1680px);
       height: 100%;
