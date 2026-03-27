@@ -690,194 +690,178 @@
       display: flex;
     }
 
+    /* ── Chapter Sheet (mobile bottom-sheet navigation) ─── */
     .chapter-menu-overlay {
       position: absolute;
       inset: 0;
       display: none;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.16s ease;
-      z-index: 2;
+      z-index: 8;
       overflow: hidden;
-      --chapter-menu-top: 0px;
-      --chapter-menu-height: 100%;
     }
 
     .chapter-menu-overlay.is-active {
-      display: block;
-      opacity: 1;
-      pointer-events: none;
-      z-index: 8;
-    }
-
-    .chapter-menu-overlay::before {
-      content: "";
-      position: absolute;
-      top: var(--chapter-menu-top, 0px);
-      left: 0;
-      right: 0;
-      height: var(--chapter-menu-height, 100%);
-      pointer-events: none;
-      background: linear-gradient(
-        270deg,
-        rgba(7, 16, 13, 0.52) 0%,
-        rgba(7, 16, 13, 0.24) 24%,
-        rgba(7, 16, 13, 0.09) 44%,
-        rgba(7, 16, 13, 0) 68%
-      );
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      pointer-events: auto;
     }
 
     .chapter-menu-backdrop {
       position: absolute;
-      top: var(--chapter-menu-top, 0px);
-      left: 0;
-      right: 0;
-      height: var(--chapter-menu-height, 100%);
+      inset: 0;
+      background: rgba(0, 5, 3, 0.65);
       pointer-events: auto;
-      z-index: 1;
-      background: transparent;
+      z-index: 0;
     }
 
     .chapter-menu-panel {
-      position: absolute;
-      top: var(--chapter-menu-top, 0px);
-      right: 0;
-      height: var(--chapter-menu-height, 100%);
-      width: min(36vw, 188px);
-      min-width: 138px;
-      max-width: 188px;
-      padding: 7px 7px 7px 8px;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 6px;
-      direction: rtl;
+      position: relative;
+      z-index: 1;
+      background: linear-gradient(180deg, #0f2b1e 0%, #0a1d14 100%);
+      border-radius: 20px 20px 0 0;
+      border-top: 1px solid rgba(232, 205, 151, 0.28);
+      box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+      max-height: 78dvh;
+      max-height: 78vh;
+      display: flex;
+      flex-direction: column;
       pointer-events: auto;
-      z-index: 2;
-      background: linear-gradient(180deg, rgba(13, 32, 25, 0.96), rgba(8, 20, 16, 0.96));
-      border-left: 1px solid rgba(232, 205, 151, 0.4);
-      box-shadow:
-        -14px 0 28px rgba(0, 0, 0, 0.38),
-        inset 1px 0 0 rgba(255, 240, 207, 0.18);
+      animation: chapter-sheet-up 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
-    .chapter-menu-hint {
-      font-size: 0.48rem;
-      letter-spacing: 0.08em;
+    @keyframes chapter-sheet-up {
+      from { transform: translateY(100%); opacity: 0.5; }
+      to   { transform: translateY(0);   opacity: 1;   }
+    }
+
+    .chapter-menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px 10px;
+      flex-shrink: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .chapter-menu-title {
+      font-size: 0.74rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
       text-transform: uppercase;
-      color: rgba(248, 229, 191, 0.72);
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding-inline: 5px;
+      color: rgba(247, 227, 186, 0.82);
+    }
+
+    .chapter-menu-close-btn {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      color: rgba(247, 227, 186, 0.68);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .chapter-menu-close-btn:active {
+      background: rgba(255, 255, 255, 0.14);
     }
 
     .chapter-menu-list {
-      position: relative;
-      display: grid;
-      grid-template-rows: repeat(20, minmax(0, 1fr));
-      gap: 2px;
+      overflow-y: auto;
+      flex: 1;
       min-height: 0;
-      height: 100%;
-      padding: 1px 0;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      padding: 6px 10px calc(12px + env(safe-area-inset-bottom, 0px));
     }
 
-    .chapter-menu-list::before,
-    .chapter-menu-list::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      height: 12%;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .chapter-menu-list::before {
-      top: 0;
-      background: linear-gradient(180deg, rgba(8, 20, 16, 0.95), rgba(8, 20, 16, 0));
-    }
-
-    .chapter-menu-list::after {
-      bottom: 0;
-      background: linear-gradient(0deg, rgba(8, 20, 16, 0.95), rgba(8, 20, 16, 0));
-    }
-
-    .chapter-menu-row {
-      min-width: 0;
-      border-radius: 12px;
-      border: 1px solid transparent;
-      background: rgba(6, 15, 12, 0.28);
-      color: rgba(247, 227, 186, 0.72);
-      display: grid;
-      grid-template-columns: 3ch minmax(0, 1fr);
+    .chapter-menu-item {
+      display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 0 6px;
-      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
-      font-size: 0.72rem;
-      line-height: 1;
-      min-height: 0;
-      overflow: hidden;
-      text-align: right;
-      pointer-events: none;
-      user-select: none;
+      gap: 13px;
+      width: 100%;
+      padding: 9px 10px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: left;
+      color: rgba(247, 227, 186, 0.8);
+      -webkit-tap-highlight-color: transparent;
+      min-height: 54px;
     }
 
-    .chapter-menu-row-number {
-      font-size: 0.52rem;
-      letter-spacing: 0.08em;
-      color: rgba(246, 225, 182, 0.66);
-      font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic", sans-serif;
+    .chapter-menu-item:active {
+      background: rgba(239, 210, 151, 0.09);
     }
 
-    .chapter-menu-row-name {
+    .chapter-menu-item.is-current {
+      background: rgba(239, 210, 151, 0.1);
+      border-color: rgba(239, 210, 151, 0.3);
+      color: #fff0c9;
+    }
+
+    .chapter-menu-item-num {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(239, 210, 151, 0.07);
+      border: 1px solid rgba(239, 210, 151, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.71rem;
+      font-weight: 600;
+      flex-shrink: 0;
+      color: rgba(246, 225, 182, 0.72);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chapter-menu-item.is-current .chapter-menu-item-num {
+      background: rgba(239, 210, 151, 0.17);
+      border-color: rgba(239, 210, 151, 0.52);
+      color: #ffe8a0;
+    }
+
+    .chapter-menu-item-body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
       min-width: 0;
+      flex: 1;
+    }
+
+    .chapter-menu-item-en {
+      font-size: 0.88rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0.01em;
+    }
+
+    .chapter-menu-item-ar {
+      font-size: 0.76rem;
+      font-family: "Amiri Quran", "Noto Naskh Arabic", serif;
+      direction: rtl;
+      color: rgba(247, 227, 186, 0.52);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .chapter-menu-row:not(.is-center) {
-      opacity: 0.64;
-      transform: scale(0.94);
+    .chapter-menu-item.is-current .chapter-menu-item-ar {
+      color: rgba(255, 232, 160, 0.72);
     }
 
-    .chapter-menu-row.is-center {
-      pointer-events: auto;
-      border-color: rgba(239, 210, 151, 0.92);
-      background: linear-gradient(165deg, rgba(25, 55, 43, 0.98), rgba(13, 29, 22, 0.98));
-      color: #fff0c9;
-      box-shadow:
-        0 0 0 1px rgba(255, 238, 204, 0.2),
-        0 9px 20px rgba(0, 0, 0, 0.36),
-        inset 0 0 0 1px rgba(255, 245, 223, 0.2);
-      opacity: 1;
-      transform: scale(1);
-    }
-
-    .chapter-menu-select {
-      width: 100%;
-      height: 100%;
-      border: none;
-      background: transparent;
-      color: inherit;
-      padding: 0;
-      margin: 0;
-      cursor: pointer;
-      display: grid;
-      grid-template-columns: 3ch minmax(0, 1fr);
-      align-items: center;
-      gap: 4px;
-      min-width: 0;
-      text-align: right;
-      font: inherit;
-    }
-
-    .chapter-menu-select:focus-visible {
-      outline: 2px solid rgba(255, 233, 183, 0.9);
+    .chapter-menu-item:focus-visible {
+      outline: 2px solid rgba(255, 233, 183, 0.8);
       outline-offset: 2px;
-      border-radius: 9px;
     }
 
     .verse-row {
@@ -1708,7 +1692,7 @@
 
       .modal-card.is-page-mode .page-nav {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 3px;
         position: sticky;
         bottom: 0;
@@ -1731,18 +1715,11 @@
       }
 
       .modal-card.is-page-mode .chapter-menu-overlay.is-active {
-        display: block;
+        display: flex;
       }
 
     }
 
-    @media (max-width: 700px) and (pointer: coarse) {
-      .chapter-menu-panel {
-        width: min(34vw, 176px);
-        min-width: 132px;
-        max-width: 176px;
-      }
-    }
 
     @media (max-width: 520px) {
       .nav-icon {
@@ -1768,29 +1745,6 @@
         line-height: 2.18;
       }
 
-      .chapter-menu-panel {
-        width: min(38vw, 164px);
-        min-width: 118px;
-        max-width: 164px;
-        padding: 6px 6px 6px 7px;
-      }
-
-      .chapter-menu-list {
-        gap: 2px;
-      }
-
-      .chapter-menu-row {
-        font-size: 0.66rem;
-        padding: 0 4px;
-      }
-
-      .chapter-menu-row-number {
-        font-size: 0.48rem;
-      }
-
-      .chapter-menu-hint {
-        font-size: 0.42rem;
-      }
     }
   </style>
 </head>
@@ -1911,14 +1865,18 @@
       </div>
       <div id="chapterMenuOverlay" class="chapter-menu-overlay" aria-hidden="true">
         <div class="chapter-menu-backdrop" data-role="chapter-menu-backdrop" aria-hidden="true"></div>
-        <div id="chapterMenuPanel" class="chapter-menu-panel" aria-label="Chapter quick navigation">
-          <div class="chapter-menu-hint">Scroll then tap center</div>
-          <div id="chapterMenuList" class="chapter-menu-list" aria-live="polite"></div>
+        <div id="chapterMenuPanel" class="chapter-menu-panel" role="dialog" aria-label="Select Chapter">
+          <div class="chapter-menu-header">
+            <span class="chapter-menu-title">Select Chapter</span>
+            <button class="chapter-menu-close-btn" data-role="chapter-menu-close" type="button" aria-label="Close">&#x2715;</button>
+          </div>
+          <div id="chapterMenuList" class="chapter-menu-list"></div>
         </div>
       </div>
       <div id="surahContainer" class="surah-container"></div>
       <div class="page-nav" aria-label="Page navigation">
         <button class="btn btn-ghost btn-small" id="pageMenuBtnBottom" type="button">Menu</button>
+        <button class="btn btn-ghost btn-small" id="chapterSheetBtn" type="button">Chapters</button>
         <button class="btn btn-ghost btn-small" id="pageNextBtnBottom" type="button">Next</button>
         <button class="btn btn-ghost btn-small" id="pagePrevBtnBottom" type="button">Prev</button>
         <button class="btn btn-ghost btn-small" id="pageCloseBtnBottom" type="button">Close</button>

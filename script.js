@@ -167,6 +167,32 @@ const FALLBACK_SURAH_NAMES_AR = [
   "الناس",
 ];
 
+const FALLBACK_SURAH_NAMES_EN = [
+  "Al-Fatihah", "Al-Baqarah", "Ali 'Imran", "An-Nisa", "Al-Ma'idah",
+  "Al-An'am", "Al-A'raf", "Al-Anfal", "At-Tawbah", "Yunus",
+  "Hud", "Yusuf", "Ar-Ra'd", "Ibrahim", "Al-Hijr",
+  "An-Nahl", "Al-Isra", "Al-Kahf", "Maryam", "Ta-Ha",
+  "Al-Anbiya", "Al-Hajj", "Al-Mu'minun", "An-Nur", "Al-Furqan",
+  "Ash-Shu'ara", "An-Naml", "Al-Qasas", "Al-Ankabut", "Ar-Rum",
+  "Luqman", "As-Sajdah", "Al-Ahzab", "Saba", "Fatir",
+  "Ya-Sin", "As-Saffat", "Sad", "Az-Zumar", "Ghafir",
+  "Fussilat", "Ash-Shura", "Az-Zukhruf", "Ad-Dukhan", "Al-Jathiyah",
+  "Al-Ahqaf", "Muhammad", "Al-Fath", "Al-Hujurat", "Qaf",
+  "Adh-Dhariyat", "At-Tur", "An-Najm", "Al-Qamar", "Ar-Rahman",
+  "Al-Waqi'ah", "Al-Hadid", "Al-Mujadila", "Al-Hashr", "Al-Mumtahanah",
+  "As-Saf", "Al-Jumu'ah", "Al-Munafiqun", "At-Taghabun", "At-Talaq",
+  "At-Tahrim", "Al-Mulk", "Al-Qalam", "Al-Haqqah", "Al-Ma'arij",
+  "Nuh", "Al-Jinn", "Al-Muzzammil", "Al-Muddaththir", "Al-Qiyamah",
+  "Al-Insan", "Al-Mursalat", "An-Naba", "An-Nazi'at", "Abasa",
+  "At-Takwir", "Al-Infitar", "Al-Mutaffifin", "Al-Inshiqaq", "Al-Buruj",
+  "At-Tariq", "Al-A'la", "Al-Ghashiyah", "Al-Fajr", "Al-Balad",
+  "Ash-Shams", "Al-Layl", "Ad-Duha", "Ash-Sharh", "At-Tin",
+  "Al-Alaq", "Al-Qadr", "Al-Bayyinah", "Az-Zalzalah", "Al-Adiyat",
+  "Al-Qari'ah", "At-Takathur", "Al-Asr", "Al-Humazah", "Al-Fil",
+  "Quraysh", "Al-Ma'un", "Al-Kawthar", "Al-Kafirun", "An-Nasr",
+  "Al-Masad", "Al-Ikhlas", "Al-Falaq", "An-Nas",
+];
+
 const TRANSLATIONS = {
   en: { label: "English", edition: "en.sahih" },
   fr: { label: "French", edition: "fr.hamidullah" },
@@ -238,6 +264,7 @@ const elements = {
   chapterMenuOverlay: document.getElementById("chapterMenuOverlay"),
   chapterMenuPanel: document.getElementById("chapterMenuPanel"),
   chapterMenuList: document.getElementById("chapterMenuList"),
+  chapterSheetBtn: document.getElementById("chapterSheetBtn"),
 };
 
 let verseCache = new Map();
@@ -675,10 +702,6 @@ function cancelChapterMenuInteraction() {
   clearChapterMenuLongPressTimer();
   stopChapterMenuMomentum();
   setChapterMenuOverlayActive(false);
-  if (elements.chapterMenuOverlay) {
-    elements.chapterMenuOverlay.style.removeProperty("--chapter-menu-top");
-    elements.chapterMenuOverlay.style.removeProperty("--chapter-menu-height");
-  }
   resetChapterMenuState();
 }
 
@@ -725,6 +748,12 @@ function getSurahArabicLabel(surahNumber) {
   return `${safeSurah}. ${arabicName || `سورة ${safeSurah}`}`;
 }
 
+function getSurahEnglishName(surahNumber) {
+  const safeSurah = clampSurahNumber(surahNumber);
+  const meta = surahMeta.get(safeSurah);
+  return meta?.englishName || FALLBACK_SURAH_NAMES_EN[safeSurah - 1] || `Surah ${safeSurah}`;
+}
+
 function buildVisibleChapterRows(centerSurah) {
   const safeCenter = wrapSurahNumber(centerSurah);
   const rows = [];
@@ -738,46 +767,28 @@ function buildVisibleChapterRows(centerSurah) {
   return rows;
 }
 
-function renderChapterMenu(centerSurah) {
+function renderChapterMenu() {
   if (!elements.chapterMenuList) return;
-  const selectedSurah = wrapSurahNumber(
-    centerSurah || chapterMenuState.selectedSurah || modalState.surahNumber || 1
-  );
-  chapterMenuState.selectedSurah = selectedSurah;
-
-  const rows = buildVisibleChapterRows(selectedSurah);
-  elements.chapterMenuList.innerHTML = rows
-    .map((row) => {
-      const numberLabel = String(row.surahNumber).padStart(3, "0");
-      const chapterName = getSurahArabicName(row.surahNumber);
-      const chapterLabel = getSurahArabicLabel(row.surahNumber);
-      const escapedName = escapeHtml(chapterName);
-      const escapedLabel = escapeHtml(chapterLabel);
-      if (row.isCenter) {
-        return `
-          <div class="chapter-menu-row is-center">
-            <button
-              class="chapter-menu-select"
-              type="button"
-              data-role="chapter-menu-select"
-              data-surah="${row.surahNumber}"
-              aria-label="Go to ${escapedLabel}"
-            >
-              <span class="chapter-menu-row-number">${numberLabel}</span>
-              <span class="chapter-menu-row-name">${escapedName}</span>
-            </button>
-          </div>
-        `;
-      }
-
-      return `
-        <div class="chapter-menu-row" aria-hidden="true">
-          <span class="chapter-menu-row-number">${numberLabel}</span>
-          <span class="chapter-menu-row-name">${escapedName}</span>
-        </div>
-      `;
-    })
-    .join("");
+  const currentSurah = clampSurahNumber(modalState.surahNumber || 1);
+  const items = [];
+  for (let i = 1; i <= TOTAL_SURAHS; i++) {
+    const en = escapeHtml(getSurahEnglishName(i));
+    const ar = escapeHtml(getSurahArabicName(i));
+    const isCurrent = i === currentSurah;
+    items.push(`<button
+      class="chapter-menu-item${isCurrent ? " is-current" : ""}"
+      type="button"
+      data-role="chapter-menu-select"
+      data-surah="${i}"
+      aria-label="Chapter ${i}, ${en}"
+      ${isCurrent ? 'aria-pressed="true"' : ''}
+    ><span class="chapter-menu-item-num">${i}</span
+    ><span class="chapter-menu-item-body"
+    ><span class="chapter-menu-item-en">${en}</span
+    ><span class="chapter-menu-item-ar">${ar}</span
+    ></span></button>`);
+  }
+  elements.chapterMenuList.innerHTML = items.join("");
 }
 
 function syncChapterMenuPanelBounds() {
@@ -853,27 +864,18 @@ function startChapterMenuMomentum(initialVelocityY) {
 }
 
 function activateChapterMenu() {
-  if (
-    !canUseChapterMenu() ||
-    chapterMenuState.startX === null ||
-    chapterMenuState.startY === null
-  ) {
-    cancelChapterMenuInteraction();
-    return;
-  }
-
-  stopChapterMenuMomentum();
+  if (!elements.chapterMenuOverlay || !elements.chapterMenuList) return;
+  if (chapterMenuState.isCommitting) return;
   chapterMenuState.active = true;
-  chapterMenuState.lastY = chapterMenuState.startY;
-  chapterMenuState.accumulatedDeltaY = 0;
   chapterMenuState.selectedSurah = clampSurahNumber(modalState.surahNumber || 1);
-  chapterMenuState.velocityY = 0;
-  chapterMenuState.isDragging = false;
-  chapterMenuState.lastMoveTs = performance.now();
-  chapterMenuState.tapCandidate = null;
-  syncChapterMenuPanelBounds();
   setChapterMenuOverlayActive(true);
-  renderChapterMenu(chapterMenuState.selectedSurah);
+  renderChapterMenu();
+  requestAnimationFrame(() => {
+    const current = elements.chapterMenuList?.querySelector(".chapter-menu-item.is-current");
+    if (current) {
+      current.scrollIntoView({ block: "center", behavior: "instant" });
+    }
+  });
 }
 
 function startChapterMenuLongPress(touch) {
@@ -1005,9 +1007,6 @@ function handleChapterMenuOverlayClick(event) {
 
   const selectButton = event.target.closest("[data-role='chapter-menu-select']");
   if (selectButton) {
-    if (event.cancelable) {
-      event.preventDefault();
-    }
     const selectedSurah = wrapSurahNumber(
       Number(selectButton.dataset.surah) || chapterMenuState.selectedSurah || modalState.surahNumber || 1
     );
@@ -1016,8 +1015,10 @@ function handleChapterMenuOverlayClick(event) {
     return;
   }
 
-  const backdrop = event.target.closest("[data-role='chapter-menu-backdrop']");
-  if (backdrop) {
+  if (
+    event.target.closest("[data-role='chapter-menu-backdrop']") ||
+    event.target.closest("[data-role='chapter-menu-close']")
+  ) {
     cancelChapterMenuInteraction();
   }
 }
@@ -1159,16 +1160,6 @@ function handlePageSwipeStart(event) {
   }
 
   const touch = event.touches ? event.touches[0] : event;
-  if (canUseChapterMenu() && isTouchInChapterMenuEdgeZone(touch)) {
-    if (event.cancelable) {
-      event.preventDefault();
-    }
-    pageSwipeStartX = null;
-    pageSwipeStartY = null;
-    startChapterMenuLongPress(touch);
-    return;
-  }
-
   pageSwipeStartX = touch.clientX;
   pageSwipeStartY = touch.clientY;
 }
@@ -1372,7 +1363,7 @@ async function loadSurahList() {
 
   const fallback = Array.from({ length: TOTAL_SURAHS }, (_, index) => ({
     number: index + 1,
-    englishName: "",
+    englishName: FALLBACK_SURAH_NAMES_EN[index] || "",
     arabicName: getSurahArabicNameFromFallback(index + 1),
     numberOfAyahs: null,
   }));
@@ -2936,10 +2927,9 @@ elements.navToggle.addEventListener("click", toggleNavOverlay);
 elements.navOverlay.addEventListener("click", handleNavOverlayClick);
 if (elements.chapterMenuOverlay) {
   elements.chapterMenuOverlay.addEventListener("click", handleChapterMenuOverlayClick);
-  elements.chapterMenuOverlay.addEventListener("touchstart", handleChapterMenuOverlayTouchStart, { passive: false });
-  elements.chapterMenuOverlay.addEventListener("touchmove", handleChapterMenuOverlayTouchMove, { passive: false });
-  elements.chapterMenuOverlay.addEventListener("touchend", handleChapterMenuOverlayTouchEnd, { passive: false });
-  elements.chapterMenuOverlay.addEventListener("touchcancel", handleChapterMenuOverlayTouchCancel, { passive: true });
+}
+if (elements.chapterSheetBtn) {
+  elements.chapterSheetBtn.addEventListener("click", () => activateChapterMenu());
 }
 elements.surahContainer.addEventListener("touchstart", handlePageSwipeStart, { passive: false });
 elements.surahContainer.addEventListener("touchmove", handlePageSwipeMove, { passive: false });
